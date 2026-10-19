@@ -678,3 +678,22 @@ button.primary {
 .exercise .reps-value { padding: clamp(3px, 1.6cqh, 8px) 0; }
 .exercise .series-row { margin-top: clamp(2px, 1cqh, 8px); gap: clamp(4px, 1cqh, 8px); }
 .exercise .serie-label { margin-bottom: 0; }
+
+/* =========================================================
+    ENCABEZADO Y PIE ADAPTABLES A LA ALTURA
+    Liberan espacio vertical en celulares bajos para que las tarjetas
+    de ejercicio tengan sitio de sobra. Con pantallas altas quedan
+    en su tamaño original.
+========================================================= */
+
+header { padding: clamp(8px, 1.8vh, 16px) 20px; }
+.week-tabs { margin-bottom: clamp(6px, 1.6vh, 18px); }
+.week-tab-arrow { width: clamp(52px, 11vh, 93px); height: clamp(52px, 11vh, 93px); font-size: clamp(22px, 4.4vh, 37px); }
+.week-tab-label { height: clamp(52px, 11vh, 93px); font-size: clamp(20px, 3.5vh, 29px); }
+.week-date { height: clamp(20px, 3.6vh, 30px); font-size: clamp(16px, 2.8vh, 23px); margin-top: clamp(4px, 1.2vh, 10px); }
+main { padding: clamp(10px, 2.4vh, 20px) 20px; }
+.routine-actions .add-serie-btn { width: clamp(34px, 5vh, 40px); height: clamp(34px, 5vh, 40px); }
+
+@media (max-height: 720px) {
+    .routine-help { display: none; }
+}
