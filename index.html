@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+    <title>Q.P.E.E.G</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#181818">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Q.P.E.E.G">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" href="icons/icon-192.png">
+
+    <link rel="stylesheet" href="styles/stylesheet.css">
+</head>
+
+<body>
+
+<!-- =========================
+    PANTALLA DE INICIO
+========================== -->
+
+<div id="landing" class="landing">
+
+    <h1 class="landing-title">Q.P.E.E.G</h1>
+
+    <div class="profile-wrap">
+        <div id="profileTooltip" class="tooltip">Tocar para entrar</div>
+
+        <div class="profile-photo" id="profilePhoto">
+            <img id="profileImg" src="" alt="Foto de perfil" style="display:none;">
+            <span id="profilePlaceholder">+</span>
+        </div>
+
+        <input type="file" id="photoInput" accept="image/*" hidden>
+    </div>
+
+    <div class="achievements-panel">
+        <div id="achievementsList" class="achievements-list"></div>
+        <div id="achievementsControl"></div>
+    </div>
+
+    <p class="footer-note">
+        Esta app está en desarrollo y aún puede mejorar, se ejecuta de forma
+        local y no necesita internet, gracias por escoger este proyecto
+        sobre otros.
+    </p>
+
+</div>
+
+
+<!-- =========================
+    APP PRINCIPAL
+========================== -->
+
+<div class="app" id="mainApp" style="display:none;">
+
+    <header>
+        <div class="week-tabs">
+            <button class="week-tab-arrow" onclick="shiftWeekTab(-1)">←</button>
+            <div class="week-tab-label">SEMANA</div>
+            <button class="week-tab-arrow" onclick="shiftWeekTab(1)">→</button>
+        </div>
+
+        <p class="week-date" id="weekDate"></p>
+    </header>
+
+    <main>
+
+        <!-- SEMANA -->
+        <section id="week" class="section active">
+            <div id="weekRoutineContent"></div>
+
+            <h2 class="series-title">Series</h2>
+            <div class="series-panel">
+                <div class="series-col" id="seriesColLeft"></div>
+                <div class="series-divider"></div>
+                <div class="series-col" id="seriesColRight"></div>
+            </div>
+        </section>
+
+        <!-- ENTRENAMIENTO -->
+        <section id="workout" class="section">
+            <button id="workoutUp" class="workout-arrow" onclick="shiftWorkoutPage(-1)">▲</button>
+
+            <div id="workoutExercises"></div>
+
+            <button id="workoutDown" class="workout-arrow" onclick="shiftWorkoutPage(1)">▼</button>
+
+            <button class="primary" onclick="completeWorkout()">
+                Completar rutina
+            </button>
+        </section>
+
+        <!-- RUTINAS -->
+        <section id="exercises" class="section">
+            <div id="routinesContainer"></div>
+        </section>
+
+        <!-- HISTORIAL -->
+        <section id="history" class="section">
+            <h2 id="historyTitle"></h2>
+            <div id="historyGrid" class="history-grid"></div>
+        </section>
+
+    </main>
+
+</div>
+
+<script src="scripts/scripts.js"></script>
+</body>
+</html>
