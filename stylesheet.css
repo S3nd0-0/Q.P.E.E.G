@@ -1,0 +1,680 @@
+/* =========================================================
+    BASE
+========================================================= */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.055);
+    --glass-bg-strong: rgba(255, 255, 255, 0.085);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-blur: blur(14px);
+    --accent: #4caf6d;
+    --accent-gold: #e0c040;
+    --accent-red: #e05555;
+}
+
+body {
+    background: #111;
+    color: #fff;
+}
+
+/* =========================================================
+    CONTENEDOR PRINCIPAL
+========================================================= */
+
+.app {
+    max-width: 500px;
+    height: 100vh;
+    margin: auto;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(76,175,109,0.08), transparent 45%),
+        radial-gradient(circle at 85% 100%, rgba(224,192,64,0.05), transparent 45%),
+        #141414;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+header {
+    padding: 16px 20px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+main {
+    padding: 20px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.section { display: none; width: 100%; }
+
+.section.active {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+h2 { margin-bottom: 15px; }
+
+/* =========================================================
+    SEMANA: HEADER + SELECTOR DE DÍA
+========================================================= */
+
+.week-tabs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-shrink: 0;
+}
+
+.week-tab-arrow {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    color: #ccc;
+    width: 93px;
+    height: 93px;
+    border-radius: 16px;
+    font-size: 37px;
+    cursor: pointer;
+}
+
+.week-tab-arrow:active { background: var(--glass-bg-strong); }
+
+.week-tab-label {
+    flex: 1;
+    max-width: 420px;
+    height: 93px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-align: center;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    font-weight: bold;
+    font-size: 29px;
+    letter-spacing: 1px;
+}
+
+.week-tab-label.clickable { cursor: pointer; }
+
+.week-date {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-align: center;
+    color: #999;
+    font-size: 23px;
+    margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.split-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 10px;
+    flex: 1;
+    min-height: 0;
+}
+
+.split-card {
+    width: 100%;
+    flex: 1;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    cursor: pointer;
+}
+
+.split-card:active { background: var(--glass-bg-strong); }
+
+.split-caption {
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+    margin-bottom: 25px;
+    flex-shrink: 0;
+}
+
+.series-title { text-align: center; flex-shrink: 0; }
+
+.series-panel {
+    display: flex;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 15px;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.series-col { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.series-divider { width: 1px; background: var(--glass-border); }
+.series-line { display: flex; justify-content: space-between; font-size: 13px; }
+.series-line span:last-child { color: #999; }
+
+/* =========================================================
+    CREADOR DE RUTINAS - PÁGINAS DE EJERCICIOS
+========================================================= */
+
+#routinesContainer { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+
+.routine-page { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+
+.day-exercises-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.day-exercises-list > .exercise { flex: 1; min-height: 0; margin-top: 0; overflow: hidden; }
+
+.routine-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-top: 10px;
+}
+
+.page-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+.page-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--glass-border); }
+.page-dot.active { background: #ccc; }
+
+.routine-actions .add-serie-btn {
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.routine-actions .add-serie-btn:active { background: rgba(255,255,255,0.14); }
+
+.routine-help {
+    text-align: center;
+    color: #777;
+    font-size: 10px;
+    line-height: 1.4;
+    margin-top: 8px;
+    flex-shrink: 0;
+    padding: 0 8px;
+}
+
+/* Grid de días: ocupa el espacio restante sin scroll */
+
+.day-grid-wrapper { flex: 1; min-height: 0; overflow: hidden; display: flex; }
+
+.day-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
+    gap: 10px;
+    width: 100%;
+}
+
+.day-grid.two-columns { grid-template-columns: repeat(2, 1fr); }
+.day-grid .add-square { width: 140px; justify-self: center; align-self: center; }
+.add-day-full-row { grid-column: 1 / span 2; }
+.day-grid-wrapper.empty-wrapper { align-items: center; }
+.day-grid.empty-grid { height: 50%; }
+
+.day-card,
+.square-card {
+    position: relative;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    color: #fff;
+    font-weight: bold;
+    font-size: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px;
+    cursor: pointer;
+    text-align: center;
+    overflow: hidden;
+}
+
+.square-card { aspect-ratio: 1 / 1; padding: 8px; }
+
+.day-card:active,
+.square-card:active { background: var(--glass-bg-strong); }
+
+.day-delete-x {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 11px;
+    color: #666;
+    cursor: pointer;
+}
+
+.day-delete-x:hover { color: var(--accent-red); }
+
+.add-square { color: #999; font-weight: normal; }
+.add-square-plus { font-size: 30px; color: #ccc; }
+.add-square small { font-size: 12px; }
+
+.hint-text {
+    text-align: center;
+    color: #777;
+    font-size: 12px;
+    margin-top: 20px;
+    flex-shrink: 0;
+}
+
+.routine-card {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 15px;
+}
+
+/* =========================================================
+    EJERCICIOS (tarjeta)
+========================================================= */
+
+.exercise {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 12px;
+    margin-top: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.exercise-top { display: flex; justify-content: space-between; align-items: center; }
+.exercise-name { font-weight: bold; }
+
+/* =========================================================
+    SEMÁFORO
+========================================================= */
+
+.semaphore-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #666;
+}
+
+.dot-red { background: var(--accent-red); }
+.dot-yellow { background: var(--accent-gold); }
+.dot-green { background: var(--accent); }
+
+/* =========================================================
+    CARRUSEL DE KG
+========================================================= */
+
+.kg-carousel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 140px;
+    margin: 14px auto 10px auto;
+}
+
+.kg-value {
+    width: 100%;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 10px 0;
+    font-weight: bold;
+}
+
+.carousel-arrow {
+    width: 100%;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    color: #ccc;
+    border-radius: 6px;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.carousel-arrow:active { background: var(--glass-bg-strong); }
+
+/* =========================================================
+    SERIES / CARRUSEL DE REPS
+========================================================= */
+
+.series-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.serie-carousel { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 56px; }
+.serie-label { font-weight: bold; font-size: 14px; margin-bottom: 2px; }
+.carousel-arrow.small { padding: 2px 0; font-size: 9px; }
+
+.reps-value {
+    width: 100%;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    padding: 8px 0;
+    font-weight: bold;
+}
+
+.add-serie-btn {
+    display: block;
+    margin: 14px auto 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.add-serie-btn:active { background: rgba(255,255,255,0.14); }
+
+.long-pressable {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* =========================================================
+    BOTONES
+========================================================= */
+
+button.primary {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: #111;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 15px;
+}
+
+/* =========================================================
+    PANTALLA DE INICIO (LANDING)
+========================================================= */
+
+.landing {
+    max-width: 500px;
+    min-height: 100vh;
+    margin: auto;
+    background:
+        radial-gradient(circle at 20% 10%, rgba(76,175,109,0.09), transparent 45%),
+        radial-gradient(circle at 80% 90%, rgba(224,192,64,0.06), transparent 45%),
+        #141414;
+    padding: 50px 25px 30px 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.landing-title { font-size: 26px; letter-spacing: 2px; margin-bottom: 50px; }
+
+.profile-wrap { position: relative; margin-bottom: 25px; }
+
+.profile-photo {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.profile-photo img { width: 100%; height: 100%; object-fit: cover; }
+#profilePlaceholder { font-size: 34px; color: #666; }
+
+.tooltip {
+    position: absolute;
+    top: -34px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #111;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s ease;
+}
+
+.tooltip.visible { opacity: 1; }
+
+.tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #fff;
+}
+
+.achievements-panel {
+    position: relative;
+    width: 100%;
+    padding: 25px 15px 10px 15px;
+    margin-top: 5px;
+    border-radius: 18px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    -webkit-mask-image: linear-gradient(180deg, transparent, black 25%, black 85%, transparent);
+    mask-image: linear-gradient(180deg, transparent, black 25%, black 85%, transparent);
+}
+
+.achievements-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; }
+
+.achievement-chip {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 8px 14px;
+    font-size: 13px;
+}
+
+.achievements-add {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.achievements-limit { font-size: 12px; color: #999; max-width: 300px; margin: 0 auto; line-height: 1.5; }
+
+.footer-note { margin-top: auto; padding-top: 40px; font-size: 11px; color: #666; line-height: 1.6; }
+
+/* =========================================================
+    ENTRENO
+========================================================= */
+
+#workout.section.active { overflow: hidden; }
+#workoutExercises { flex: 1; min-height: 0; overflow: hidden; }
+
+.workout-page { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.workout-page .exercise { flex: 1; min-height: 0; }
+
+.workout-arrow {
+    width: 100%;
+    flex-shrink: 0;
+    height: 28px;
+    margin: 6px 0;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.workout-arrow:active { background: var(--glass-bg-strong); }
+
+/* =========================================================
+    RUTINAS: ACTIVAR
+========================================================= */
+
+.routine-activate {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 9px;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.25);
+    color: #999;
+    cursor: pointer;
+}
+
+.routine-active .routine-activate {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #111;
+    font-weight: bold;
+}
+
+/* =========================================================
+    SEMANA: días ocupan el espacio restante, Series fijo abajo
+========================================================= */
+
+#week.section.active { overflow: hidden; }
+#weekRoutineContent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#weekRoutineContent .split-picker { flex: 1; min-height: 0; }
+#weekRoutineContent .split-caption { margin-bottom: 10px; }
+
+/* =========================================================
+    HISTORIAL
+========================================================= */
+
+.history-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.history-weekday { text-align: center; color: #777; font-size: 11px; }
+
+.history-cell {
+    aspect-ratio: 1 / 1;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.history-cell.green { background: var(--accent); color: #111; border-color: var(--accent); }
+.history-cell.red { background: var(--accent-red); border-color: var(--accent-red); }
+.history-cell.gold { background: var(--accent-gold); color: #111; border-color: var(--accent-gold); }
+.history-cell.today { outline: 2px solid #ccc; }
+.history-cell.future { opacity: .35; cursor: default; }
+.history-cell.blank { visibility: hidden; }
+
+/* =========================================================
+    AJUSTE A PANTALLAS BAJAS
+    La tarjeta de ejercicio escala sus espacios según su propia altura,
+    así el cuadro de repeticiones siempre cabe (en pantallas altas
+    se ven los valores originales por los máximos del clamp).
+========================================================= */
+
+.exercise { container-type: size; padding: clamp(6px, 2.6cqh, 12px); }
+.exercise .kg-carousel { margin: clamp(2px, 2cqh, 14px) auto clamp(2px, 1.5cqh, 10px) auto; gap: clamp(1px, 0.8cqh, 4px); }
+.exercise .carousel-arrow { padding: clamp(1px, 0.8cqh, 4px) 0; }
+.exercise .carousel-arrow.small { padding: clamp(1px, 0.6cqh, 2px) 0; }
+.exercise .kg-value { padding-top: clamp(3px, 1.8cqh, 8px); padding-bottom: clamp(3px, 1.8cqh, 8px); }
+.exercise .reps-value { padding: clamp(3px, 1.6cqh, 8px) 0; }
+.exercise .series-row { margin-top: clamp(2px, 1cqh, 8px); gap: clamp(4px, 1cqh, 8px); }
+.exercise .serie-label { margin-bottom: 0; }
