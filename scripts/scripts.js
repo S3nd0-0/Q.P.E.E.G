@@ -429,13 +429,8 @@ function buildExerciseCard(routineId, dayId, exerciseId) {
 
     const kgBox = document.createElement("div");
     kgBox.className = "kg-carousel";
-    kgBox.innerHTML = `
-        <button class="carousel-arrow" data-action="kg-up">▲</button>
-        <div class="kg-value" id="kg-${exerciseId}">${log.kg} kg</div>
-        <button class="carousel-arrow" data-action="kg-down">▼</button>
-    `;
-    kgBox.querySelector('[data-action="kg-up"]').onclick = () => changeWorkoutKg(routineId, dayId, exerciseId, KG_STEP);
-    kgBox.querySelector('[data-action="kg-down"]').onclick = () => changeWorkoutKg(routineId, dayId, exerciseId, -KG_STEP);
+    kgBox.innerHTML = `<div class="kg-value" id="kg-${exerciseId}">${log.kg} kg</div>`;
+    attachValueSwipe(kgBox.querySelector(".kg-value"), dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP));
     card.appendChild(kgBox);
 
     const seriesRow = document.createElement("div");
@@ -461,13 +456,10 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
         wrap.className = "serie-carousel";
         wrap.innerHTML = `
             <span class="serie-label">${toRoman(index + 1)}</span>
-            <button class="carousel-arrow small">▲</button>
             <div class="reps-value">${log.reps[index]}</div>
-            <button class="carousel-arrow small">▼</button>
         `;
         const valueBox = wrap.querySelector(".reps-value");
-        wrap.querySelectorAll(".carousel-arrow")[0].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, 1, valueBox);
-        wrap.querySelectorAll(".carousel-arrow")[1].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, -1, valueBox);
+        attachValueSwipe(valueBox, dir => changeWorkoutReps(routineId, dayId, exerciseId, index, dir, valueBox));
         row.appendChild(wrap);
     });
 
@@ -838,7 +830,7 @@ function buildDayExercisesView(routineId, dayId) {
 
     const help = document.createElement("p");
     help.className = "routine-help";
-    help.textContent = "Máx. 6 series por ejercicio y máx. 6 páginas de ejercicios (2 por página). Mantén presionado el peso para introducirlo manualmente. Mantén presionada una serie para eliminarla.";
+    help.textContent = "Desliza hacia arriba o abajo sobre el peso o una serie para subirlo o bajarlo. Mantén presionado el peso para escribirlo; mantén presionada una serie para eliminarla. Máx. 6 series por ejercicio y 6 páginas (2 ejercicios por página).";
     root.appendChild(help);
 
     return root;
@@ -915,15 +907,10 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
 
     const kgBox = document.createElement("div");
     kgBox.className = "kg-carousel";
-    kgBox.innerHTML = `
-        <button class="carousel-arrow">▲</button>
-        <div class="kg-value long-pressable">${exercise.kg} kg/lbs</div>
-        <button class="carousel-arrow">▼</button>
-    `;
+    kgBox.innerHTML = `<div class="kg-value long-pressable">${exercise.kg} kg/lbs</div>`;
     const kgValue = kgBox.querySelector(".kg-value");
-    kgBox.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, KG_STEP, kgValue);
-    kgBox.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, -KG_STEP, kgValue);
-    attachLongPress(kgBox.querySelector(".kg-value"), () => setCustomRoutineKg(routineId, dayId, exerciseIndex));
+    attachValueSwipe(kgValue, dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, kgValue));
+    attachLongPress(kgValue, () => setCustomRoutineKg(routineId, dayId, exerciseIndex));
     card.appendChild(kgBox);
 
     const seriesRow = document.createElement("div");
@@ -934,14 +921,11 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
         el.className = "serie-carousel long-pressable";
         el.innerHTML = `
             <span class="serie-label">${toRoman(serieIndex + 1)}</span>
-            <button class="carousel-arrow small">▲</button>
             <div class="reps-value">${serie.target}</div>
-            <button class="carousel-arrow small">▼</button>
         `;
         const repsValue = el.querySelector(".reps-value");
-        el.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, 1, repsValue);
-        el.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, -1, repsValue);
-        attachLongPress(el.querySelector(".reps-value"), () => removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex));
+        attachValueSwipe(repsValue, dir => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, dir, repsValue));
+        attachLongPress(repsValue, () => removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex));
         seriesRow.appendChild(el);
     });
 
@@ -1016,8 +1000,12 @@ function removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex) {
 function attachLongPress(el, callback) {
     let timer = null;
 
+    let sx = 0, sy = 0;
+
     const start = (event) => {
         if (event.type === "mousedown" && event.button !== 0) return;
+        const point = event.touches ? event.touches[0] : event;
+        sx = point.clientX; sy = point.clientY;
         timer = setTimeout(callback, 550);
     };
 
@@ -1035,6 +1023,37 @@ function attachLongPress(el, callback) {
     el.addEventListener("touchend", cancel);
     el.addEventListener("touchcancel", cancel);
     el.addEventListener("touchmove", cancel);
+    el.addEventListener("pointermove", e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) cancel(); });
+}
+
+/* Deslizar verticalmente sobre un número lo sube (arriba) o lo baja (abajo):
+   un paso cada VALUE_STEP_PX píxeles, con la animación del número. */
+const VALUE_STEP_PX = 26;
+
+function attachValueSwipe(el, onStep) {
+    let lastY = null, pointer = null;
+
+    el.addEventListener("pointerdown", e => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        lastY = e.clientY;
+        pointer = e.pointerId;
+        try { el.setPointerCapture(pointer); } catch (err) {}
+    });
+
+    el.addEventListener("pointermove", e => {
+        if (lastY === null || e.pointerId !== pointer) return;
+        let dy = e.clientY - lastY;
+        while (Math.abs(dy) >= VALUE_STEP_PX) {
+            const dir = dy < 0 ? 1 : -1;          /* arriba = subir */
+            onStep(dir);
+            lastY -= dir * VALUE_STEP_PX;
+            dy = e.clientY - lastY;
+        }
+    });
+
+    const end = () => { lastY = null; pointer = null; };
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
 }
 
 /* =========================================================
@@ -1325,7 +1344,7 @@ function initSwipe() {
 
     app.addEventListener("pointerdown", e => {
         if (SWIPE.busy || (e.pointerType === "mouse" && e.button !== 0)) return;
-        if (e.target.closest("input, textarea, select")) return;
+        if (e.target.closest("input, textarea, select, .kg-value, .reps-value")) return;
         g = { x: e.clientX, y: e.clientY, t: performance.now(), inHeader: !!e.target.closest("header"), axis: null, ctx: null, p: 0, dir: 0, can: false };
     });
 
