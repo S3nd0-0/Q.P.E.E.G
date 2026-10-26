@@ -375,21 +375,6 @@ h2 { margin-bottom: 15px; }
     font-weight: bold;
 }
 
-.carousel-arrow {
-    width: 100%;
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--glass-border);
-    color: #ccc;
-    border-radius: 6px;
-    padding: 4px 0;
-    cursor: pointer;
-    font-size: 11px;
-    line-height: 1;
-}
-
-.carousel-arrow:active { background: var(--glass-bg-strong); }
 
 /* =========================================================
     SERIES / CARRUSEL DE REPS
@@ -398,7 +383,6 @@ h2 { margin-bottom: 15px; }
 .series-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .serie-carousel { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 56px; }
 .serie-label { font-weight: bold; font-size: 14px; margin-bottom: 2px; }
-.carousel-arrow.small { padding: 2px 0; font-size: 9px; }
 
 .reps-value {
     width: 100%;
@@ -666,10 +650,8 @@ main::-webkit-scrollbar { display: none; }
 
 .exercise { container-type: normal; padding: calc(12px * var(--k)); }
 .exercise .kg-carousel { margin: calc(14px * var(--k)) auto calc(10px * var(--k)) auto; gap: calc(4px * var(--k)); }
-.exercise .carousel-arrow { padding: calc(4px * var(--k)) 0; }
-.exercise .carousel-arrow.small { padding: calc(2px * var(--k)) 0; }
-.exercise .kg-value { padding-top: calc(8px * var(--k)); padding-bottom: calc(8px * var(--k)); }
-.exercise .reps-value { padding: calc(8px * var(--k)) 0; }
+.exercise .kg-value { padding-top: calc(14px * var(--k)); padding-bottom: calc(14px * var(--k)); }
+.exercise .reps-value { padding: calc(14px * var(--k)) 0; }
 .exercise .series-row { margin-top: calc(8px * var(--k)); gap: calc(8px * var(--k)); }
 .exercise .add-serie-btn { margin-top: calc(14px * var(--k)); }
 .routine-actions { margin-top: calc(10px * var(--k)); }
@@ -696,3 +678,9 @@ main { overflow-x: hidden; }
 /* Los números suben/bajan dentro de su cuadro y se recortan en el borde */
 .kg-value, .reps-value { overflow: hidden; }
 .kg-value .v, .reps-value .v { display: inline-block; will-change: transform, opacity; }
+
+/* Sin flechas: los números se cambian deslizando arriba/abajo sobre ellos */
+.kg-value, .reps-value { touch-action: none; cursor: ns-resize; }
+.kg-value { padding-top: calc(14px * var(--k)); padding-bottom: calc(14px * var(--k)); font-size: 18px; }
+.reps-value { padding: calc(14px * var(--k)) 0; font-size: 18px; }
+.serie-carousel { width: 62px; }
