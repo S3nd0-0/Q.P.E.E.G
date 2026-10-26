@@ -215,14 +215,14 @@ function onAddAchievement() {
     SEMANA
 ========================================================= */
 
-/* Orden cíclico de pestañas que recorren las flechas del header */
+/* Orden cíclico de pestañas que recorre el deslizamiento horizontal */
 const TAB_ORDER = [
     { id: "week", label: "SEMANA" },
     { id: "exercises", label: "RUTINAS" },
     { id: "history", label: "HISTORIAL" }
 ];
 
-/* Las flechitas del header recorren TAB_ORDER en bucle; desde Entreno
+/* Deslizar recorre TAB_ORDER en bucle; desde Entreno
    (que no pertenece a TAB_ORDER) salen tomando "Semana" como base */
 function shiftWeekTab(direction) {
     selectedDate = null;
@@ -347,6 +347,19 @@ function showSection(sectionId) {
 
     const tab = TAB_ORDER.find(t => t.id === sectionId);
     label.textContent = tab ? tab.label : (sectionId === "workout" ? "ENTRENO" : label.textContent);
+
+    renderDots(document.getElementById("tabDots"), TAB_ORDER.length, TAB_ORDER.findIndex(t => t.id === sectionId));
+}
+
+/* Puntos indicadores (index = -1: ninguno activo) */
+function renderDots(container, total, index) {
+    container.innerHTML = "";
+    if (total < 2) return;
+    for (let i = 0; i < total; i++) {
+        const dot = document.createElement("span");
+        dot.className = "page-dot" + (i === index ? " active" : "");
+        container.appendChild(dot);
+    }
 }
 
 function goToWeek() {
@@ -385,8 +398,7 @@ function renderWorkoutForDay(routineId, dayId) {
 
     container.appendChild(page);
 
-    document.getElementById("workoutUp").style.visibility = workoutPage > 0 ? "visible" : "hidden";
-    document.getElementById("workoutDown").style.visibility = workoutPage < totalPages - 1 ? "visible" : "hidden";
+    renderDots(document.getElementById("workoutDots"), totalPages, workoutPage);
 }
 
 function shiftWorkoutPage(direction) {
@@ -805,18 +817,9 @@ function buildDayExercisesView(routineId, dayId) {
     }
     root.appendChild(pageIndicator);
 
-    /* Botones inferiores: ← [+] →, centrados. Volver solo si hay página
-       anterior; avanzar solo si ya existe una página siguiente. */
+    /* Botón inferior "+" (las páginas se cambian deslizando) */
     const actions = document.createElement("div");
     actions.className = "routine-actions";
-
-    if (page > 0) {
-        const backBtn = document.createElement("button");
-        backBtn.className = "add-serie-btn";
-        backBtn.textContent = "←";
-        backBtn.onclick = () => { routineNav.exercisePage--; renderRoutinesTab(); };
-        actions.appendChild(backBtn);
-    }
 
     if (totalPages < MAX_EXERCISE_PAGES) {
         const addBtn = document.createElement("button");
@@ -824,14 +827,6 @@ function buildDayExercisesView(routineId, dayId) {
         addBtn.textContent = "+";
         addBtn.onclick = () => addRoutineExercise(routineId, dayId);
         actions.appendChild(addBtn);
-    }
-
-    if (page < totalPages - 1) {
-        const forwardBtn = document.createElement("button");
-        forwardBtn.className = "add-serie-btn";
-        forwardBtn.textContent = "→";
-        forwardBtn.onclick = () => { routineNav.exercisePage++; renderRoutinesTab(); };
-        actions.appendChild(forwardBtn);
     }
 
     root.appendChild(actions);
@@ -1122,7 +1117,226 @@ function completeWorkout() {
     ARRANQUE
 ========================================================= */
 
+/* =========================================================
+    AJUSTE AUTOMÁTICO AL ESPACIO DISPONIBLE
+    Si el contenido de la sección no cabe, primero se achica el encabezado
+    (--hdr) para alargar el campo y luego los espacios internos (--k).
+========================================================= */
+
+function fitLayout(force) {
+    if (SWIPE.busy && !force) return; /* se ajusta al terminar de cambiar de pantalla */
+    const app = document.getElementById("mainApp");
+    const main = document.querySelector("main");
+    if (!app || !main || app.style.display === "none") return;
+
+    const root = document.documentElement;
+    root.style.removeProperty("--hdr");
+    root.style.removeProperty("--k");
+
+    /* Cuánto se pasa el contenido visible del borde inferior de la zona principal,
+       mida lo que mida su contenedor (aunque este lo recorte) */
+    const active = main.querySelector(".section.active");
+    const overflows = () => {
+        const limit = main.getBoundingClientRect().bottom - parseFloat(getComputedStyle(main).paddingBottom);
+        let lowest = 0;
+        active.querySelectorAll("*").forEach(el => {
+            const r = el.getBoundingClientRect();
+            if (r.height > 0 && r.bottom > lowest) lowest = r.bottom;
+        });
+        return Math.max(lowest - limit, main.scrollHeight - main.clientHeight) > 1;
+    };
+    if (!overflows()) return;
+
+    const base = parseFloat(getComputedStyle(document.querySelector(".week-tab-label")).height);
+    for (let h = base - 4; h >= 34; h -= 4) {
+        root.style.setProperty("--hdr", `${h}px`);
+        if (!overflows()) return;
+    }
+
+    for (let k = 0.9; k >= 0.3; k -= 0.1) {
+        root.style.setProperty("--k", k.toFixed(2));
+        if (!overflows()) return;
+    }
+}
+
+let fitQueued = false;
+function queueFit() {
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(() => { fitQueued = false; fitLayout(); });
+}
+
+function initFitLayout() {
+    new MutationObserver(queueFit).observe(document.querySelector("main"), { childList: true, subtree: true });
+    new MutationObserver(queueFit).observe(document.getElementById("mainApp"), { attributes: true, attributeFilter: ["style"] });
+    window.addEventListener("resize", queueFit);
+    window.addEventListener("orientationchange", queueFit);
+}
+
+
+/* =========================================================
+    DESLIZAMIENTO (SWIPE) CON ANIMACIÓN
+    - Horizontal: cambia de pestaña (Semana / Rutinas / Historial);
+      dentro de las páginas de ejercicios de una rutina pasa de página.
+    - Vertical (solo en Entreno): cambia de página de ejercicios.
+    La pantalla sigue al dedo; al soltar se completa o rebota.
+========================================================= */
+
+/* Profundidad: la pantalla actual se aleja hacia el lado contrario al que vas, se encoge y se
+   desvanece; la nueva llega desde el lado al que vas, desde el fondo, y se agranda hasta su sitio. */
+const ANIM = {
+    out: (p, a) => ({ transform: `translate${a}(${p * 18}%) scale(${1 - 0.16 * Math.abs(p)})`, opacity: 1 - Math.abs(p), origin: "50% 50%" }),
+    in:  (p, a) => ({ transform: `translate${a}(${p * 32}%) scale(${1 - 0.2 * Math.abs(p)})`, opacity: 1 - Math.abs(p), origin: "50% 50%" })
+};
+
+const SWIPE = { busy: false, justDragged: false };
+
+const frameStyle = f => ({ transform: f.transform, opacity: f.opacity, transformOrigin: f.origin });
+
+function setFrame(el, f) {
+    el.style.transform = f.transform;
+    el.style.opacity = f.opacity;
+    el.style.transformOrigin = f.origin;
+}
+
+function clearFrame(el) {
+    el.style.transform = "";
+    el.style.opacity = "";
+    el.style.transformOrigin = "";
+}
+
+function playFrames(el, from, to, ms, easing) {
+    const anim = el.animate([frameStyle(from), frameStyle(to)], { duration: ms, easing, fill: "forwards" });
+    return anim.finished.then(() => anim.cancel()).catch(() => {});
+}
+
+/* Completa el cambio: sale la pantalla actual, se actualiza el contenido y entra la nueva */
+async function commitSwipe(ctx, dir, p0) {
+    const A = ANIM, a = ctx.axis === "x" ? "X" : "Y";
+    SWIPE.busy = true;
+
+    await playFrames(ctx.el, A.out(p0, a), A.out(-dir, a), 170, "ease-in");
+
+    clearFrame(ctx.el);
+    ctx.run(dir);
+    fitLayout(true);
+
+    setFrame(ctx.el, A.in(dir, a));
+    await playFrames(ctx.el, A.in(dir, a), A.in(0, a), 260, "cubic-bezier(.2,.8,.2,1)");
+
+    clearFrame(ctx.el);
+    SWIPE.busy = false;
+}
+
+/* Rebote: vuelve a su sitio (también cuando no hay más páginas) */
+async function snapBack(ctx, p0) {
+    const A = ANIM, a = ctx.axis === "x" ? "X" : "Y";
+    SWIPE.busy = true;
+    await playFrames(ctx.el, A.out(p0, a), A.out(0, a), 240, "cubic-bezier(.2,.9,.3,1.2)");
+    clearFrame(ctx.el);
+    SWIPE.busy = false;
+}
+
+/* Qué se desliza según dónde se toque y hacia qué eje */
+function swipeContext(inHeader, axis) {
+    const main = document.querySelector("main");
+    const active = document.querySelector(".section.active").id;
+
+    const tabs = { el: main, axis: "x", can: () => true, run: d => shiftWeekTab(d) };
+
+    if (inHeader) return axis === "x" ? tabs : null;
+
+    if (active === "workout") {
+        if (axis === "x") return tabs;
+        const day = findDay(findRoutine(activeWorkout.routineId) || { days: [] }, activeWorkout.dayId);
+        const total = day ? Math.ceil(day.exercises.length / EXERCISES_PER_SCREEN) : 1;
+        if (total < 2) return null;
+        return {
+            el: document.getElementById("workoutExercises"), axis: "y",
+            can: d => workoutPage + d >= 0 && workoutPage + d < total,
+            run: d => shiftWorkoutPage(d)
+        };
+    }
+
+    if (axis !== "x") return null;
+
+    if (active === "exercises" && routineNav.level === "exercises") {
+        const day = findDay(findRoutine(routineNav.routineId), routineNav.dayId);
+        const total = Math.max(1, Math.ceil(day.exercises.length / EXERCISES_PER_PAGE));
+        return {
+            el: document.getElementById("routinesContainer"), axis: "x",
+            can: d => (routineNav.exercisePage || 0) + d >= 0 && (routineNav.exercisePage || 0) + d < total,
+            run: d => { routineNav.exercisePage = (routineNav.exercisePage || 0) + d; renderRoutinesTab(); }
+        };
+    }
+
+    return tabs;
+}
+
+function initSwipe() {
+    const app = document.getElementById("mainApp");
+    let g = null;
+
+    app.addEventListener("pointerdown", e => {
+        if (SWIPE.busy || (e.pointerType === "mouse" && e.button !== 0)) return;
+        if (e.target.closest("input, textarea, select")) return;
+        g = { x: e.clientX, y: e.clientY, t: performance.now(), inHeader: !!e.target.closest("header"), axis: null, ctx: null, p: 0, dir: 0, can: false };
+    });
+
+    window.addEventListener("pointermove", e => {
+        if (!g) return;
+        const dx = e.clientX - g.x, dy = e.clientY - g.y;
+
+        if (!g.axis) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+            g.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+            g.ctx = swipeContext(g.inHeader, g.axis);
+            if (!g.ctx) { g = null; return; }
+            g.size = g.axis === "x" ? g.ctx.el.offsetWidth : g.ctx.el.offsetHeight;
+            g.ctx.el.style.willChange = "transform, opacity";
+        }
+
+        const d = g.axis === "x" ? dx : dy;
+        g.dir = d < 0 ? 1 : -1;               /* deslizar a la izquierda / arriba = siguiente */
+        g.can = g.ctx.can(g.dir);
+        g.p = Math.max(-1, Math.min(1, d / g.size)) * (g.can ? 1 : 0.18);   /* sin más páginas: resistencia */
+        g.dragging = true;
+
+        const A = ANIM;
+        setFrame(g.ctx.el, A.out(g.p, g.axis === "x" ? "X" : "Y"));
+    });
+
+    const finish = (e, cancelled) => {
+        if (!g) return;
+        const gesture = g;
+        g = null;
+        if (!gesture.dragging) return;
+
+        gesture.ctx.el.style.willChange = "";
+        SWIPE.justDragged = true;
+        setTimeout(() => { SWIPE.justDragged = false; }, 60);
+
+        const d = Math.abs(gesture.axis === "x" ? e.clientX - gesture.x : e.clientY - gesture.y);
+        const velocity = d / Math.max(1, performance.now() - gesture.t);
+        const passed = Math.abs(gesture.p) > 0.22 || (velocity > 0.45 && d > 30);
+
+        if (!cancelled && gesture.can && passed) commitSwipe(gesture.ctx, gesture.dir, gesture.p);
+        else snapBack(gesture.ctx, gesture.p);
+    };
+
+    window.addEventListener("pointerup", e => finish(e, false));
+    window.addEventListener("pointercancel", e => finish(e, true));
+
+    /* Un arrastre no debe activar el botón sobre el que terminó el dedo */
+    app.addEventListener("click", e => {
+        if (SWIPE.justDragged) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+    initSwipe();
+    renderDots(document.getElementById("tabDots"), TAB_ORDER.length, 0);
+    initFitLayout();
     initLanding();
     renderWeekSection();
     renderSeriesPanel();
