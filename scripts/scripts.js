@@ -465,8 +465,9 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
             <div class="reps-value">${log.reps[index]}</div>
             <button class="carousel-arrow small">▼</button>
         `;
-        wrap.querySelectorAll(".carousel-arrow")[0].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, 1);
-        wrap.querySelectorAll(".carousel-arrow")[1].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, -1);
+        const valueBox = wrap.querySelector(".reps-value");
+        wrap.querySelectorAll(".carousel-arrow")[0].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, 1, valueBox);
+        wrap.querySelectorAll(".carousel-arrow")[1].onclick = () => changeWorkoutReps(routineId, dayId, exerciseId, index, -1, valueBox);
         row.appendChild(wrap);
     });
 
@@ -476,17 +477,21 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
 function changeWorkoutKg(routineId, dayId, exerciseId, delta) {
     const ex = getWorkoutExercise(routineId, dayId, exerciseId);
     const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
+    const before = log.kg;
     log.kg = Math.max(0, log.kg + delta);
     saveState();
-    document.getElementById(`kg-${exerciseId}`).textContent = `${log.kg} kg`;
+    if (log.kg !== before) animateValue(document.getElementById(`kg-${exerciseId}`), delta > 0 ? 1 : -1, `${log.kg} kg`);
 }
 
-function changeWorkoutReps(routineId, dayId, exerciseId, index, delta) {
+function changeWorkoutReps(routineId, dayId, exerciseId, index, delta, valueBox) {
     const ex = getWorkoutExercise(routineId, dayId, exerciseId);
     const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
-    log.reps[index] = Math.max(0, (log.reps[index] || 0) + delta);
+    const before = log.reps[index] || 0;
+    log.reps[index] = Math.max(0, before + delta);
     saveState();
-    renderWorkoutSeries(routineId, dayId, exerciseId);
+
+    if (log.reps[index] !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(log.reps[index]));
+    updateSemaphore(routineId, dayId, exerciseId);
     renderSeriesPanel();
 }
 
@@ -915,8 +920,9 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
         <div class="kg-value long-pressable">${exercise.kg} kg/lbs</div>
         <button class="carousel-arrow">▼</button>
     `;
-    kgBox.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, KG_STEP);
-    kgBox.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, -KG_STEP);
+    const kgValue = kgBox.querySelector(".kg-value");
+    kgBox.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, KG_STEP, kgValue);
+    kgBox.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineKg(routineId, dayId, exerciseIndex, -KG_STEP, kgValue);
     attachLongPress(kgBox.querySelector(".kg-value"), () => setCustomRoutineKg(routineId, dayId, exerciseIndex));
     card.appendChild(kgBox);
 
@@ -932,8 +938,9 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
             <div class="reps-value">${serie.target}</div>
             <button class="carousel-arrow small">▼</button>
         `;
-        el.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, 1);
-        el.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, -1);
+        const repsValue = el.querySelector(".reps-value");
+        el.querySelectorAll(".carousel-arrow")[0].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, 1, repsValue);
+        el.querySelectorAll(".carousel-arrow")[1].onclick = () => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, -1, repsValue);
         attachLongPress(el.querySelector(".reps-value"), () => removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex));
         seriesRow.appendChild(el);
     });
@@ -955,22 +962,24 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
     return card;
 }
 
-function changeRoutineKg(routineId, dayId, exerciseIndex, delta) {
+function changeRoutineKg(routineId, dayId, exerciseIndex, delta, valueBox) {
     const day = findDay(findRoutine(routineId), dayId);
     const exercise = day.exercises[exerciseIndex];
 
+    const before = exercise.kg;
     exercise.kg = Math.max(0, exercise.kg + delta);
     saveState();
-    renderRoutinesTab();
+    if (exercise.kg !== before) animateValue(valueBox, delta > 0 ? 1 : -1, `${exercise.kg} kg/lbs`);
 }
 
-function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta) {
+function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, valueBox) {
     const day = findDay(findRoutine(routineId), dayId);
     const serie = day.exercises[exerciseIndex].series[serieIndex];
 
+    const before = serie.target;
     serie.target = Math.max(0, serie.target + delta);
     saveState();
-    renderRoutinesTab();
+    if (serie.target !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(serie.target));
 }
 
 function setCustomRoutineKg(routineId, dayId, exerciseIndex) {
@@ -1141,6 +1150,7 @@ function fitLayout(force) {
         let lowest = 0;
         active.querySelectorAll("*").forEach(el => {
             const r = el.getBoundingClientRect();
+            if (el.dataset.anim === "1") return;
             if (r.height > 0 && r.bottom > lowest) lowest = r.bottom;
         });
         return Math.max(lowest - limit, main.scrollHeight - main.clientHeight) > 1;
@@ -1189,6 +1199,12 @@ const ANIM = {
     in:  (p, a) => ({ transform: `translate${a}(${p * 32}%) scale(${1 - 0.2 * Math.abs(p)})`, opacity: 1 - Math.abs(p), origin: "50% 50%" })
 };
 
+/* Mismo estilo para los números de las flechas ▲▼: el número viejo se aleja y el nuevo llega desde el fondo */
+const VALUE_ANIM = {
+    out: (p, a) => ({ transform: `translate${a}(${p * 70}%) scale(${1 - 0.45 * Math.abs(p)})`, opacity: 1 - Math.abs(p), origin: "50% 50%" }),
+    in:  (p, a) => ({ transform: `translate${a}(${p * 85}%) scale(${1 - 0.45 * Math.abs(p)})`, opacity: 1 - Math.abs(p), origin: "50% 50%" })
+};
+
 const SWIPE = { busy: false, justDragged: false };
 
 const frameStyle = f => ({ transform: f.transform, opacity: f.opacity, transformOrigin: f.origin });
@@ -1226,6 +1242,36 @@ async function commitSwipe(ctx, dir, p0) {
 
     clearFrame(ctx.el);
     SWIPE.busy = false;
+}
+
+/* Cambia el texto de un valor (kg, repeticiones) con animación.
+   dir = +1 al subir (▲): el número viejo sale hacia arriba y el nuevo llega desde abajo; -1 al bajar (▼).
+   El dato ya está guardado cuando se llama: solo se anima lo que se ve. */
+async function animateValue(box, dir, text) {
+    let span = box.querySelector(".v");
+    if (!span) {
+        span = document.createElement("span");
+        span.className = "v";
+        span.textContent = box.textContent;
+        box.textContent = "";
+        box.appendChild(span);
+    }
+
+    const token = (span._token = (span._token || 0) + 1);
+    const mid = span.dataset.anim === "1";   /* ya había una animación en curso: no repite la salida */
+    span.dataset.anim = "1";
+    span.getAnimations().forEach(a => a.cancel());
+
+    if (!mid) await playFrames(span, VALUE_ANIM.out(0, "Y"), VALUE_ANIM.out(-dir, "Y"), 90, "ease-in");
+    if (token !== span._token) return;
+
+    span.textContent = text;
+    setFrame(span, VALUE_ANIM.in(dir, "Y"));
+    await playFrames(span, VALUE_ANIM.in(dir, "Y"), VALUE_ANIM.in(0, "Y"), 160, "cubic-bezier(.2,.8,.2,1)");
+    if (token !== span._token) return;
+
+    clearFrame(span);
+    delete span.dataset.anim;
 }
 
 /* Rebote: vuelve a su sitio (también cuando no hay más páginas) */
