@@ -62,10 +62,10 @@
 
     <header>
         <div class="week-tabs">
-            <button class="week-tab-arrow" onclick="shiftWeekTab(-1)">←</button>
             <div class="week-tab-label">SEMANA</div>
-            <button class="week-tab-arrow" onclick="shiftWeekTab(1)">→</button>
         </div>
+
+        <div class="tab-dots" id="tabDots"></div>
 
         <p class="week-date" id="weekDate"></p>
     </header>
@@ -86,11 +86,9 @@
 
         <!-- ENTRENAMIENTO -->
         <section id="workout" class="section">
-            <button id="workoutUp" class="workout-arrow" onclick="shiftWorkoutPage(-1)">▲</button>
 
             <div id="workoutExercises"></div>
-
-            <button id="workoutDown" class="workout-arrow" onclick="shiftWorkoutPage(1)">▼</button>
+            <div id="workoutDots" class="page-indicator"></div>
 
             <button class="primary" onclick="completeWorkout()">
                 Completar rutina
