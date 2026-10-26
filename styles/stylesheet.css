@@ -692,3 +692,7 @@ main { overflow-x: hidden; }
 .tab-dots, #workoutDots { display: flex; justify-content: center; align-items: center; gap: 6px; flex-shrink: 0; }
 .tab-dots { height: 7px; margin-top: calc(var(--hdr) * 0.12); }
 #workoutDots { margin-top: calc(10px * var(--k)); min-height: 7px; }
+
+/* Los números suben/bajan dentro de su cuadro y se recortan en el borde */
+.kg-value, .reps-value { overflow: hidden; }
+.kg-value .v, .reps-value .v { display: inline-block; will-change: transform, opacity; }
