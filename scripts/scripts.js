@@ -144,7 +144,7 @@ function onProfilePhotoClick() {
         return;
     }
 
-    enterApp();
+    enterApp(true);
 }
 
 function onPhotoSelected(event) {
@@ -163,10 +163,39 @@ function onPhotoSelected(event) {
     reader.readAsDataURL(file);
 }
 
-function enterApp() {
-    document.getElementById("landing").style.display = "none";
-    document.getElementById("mainApp").style.display = "flex";
-    setHeaderDateText(getDateText());
+function enterApp(animated) {
+    const landing = document.getElementById("landing");
+    const app = document.getElementById("mainApp");
+    const show = () => setHeaderDateText(getDateText());
+
+    if (animated && !SWIPE.busy) {
+        switchScreen(landing, app, 1, "flex", show);
+        return;
+    }
+
+    landing.style.display = "none";
+    app.style.display = "flex";
+    show();
+}
+
+/* Cambia entre la pantalla de inicio y la app con la animación Profundidad */
+async function switchScreen(fromEl, toEl, dir, toDisplay, after) {
+    SWIPE.busy = true;
+    document.body.style.overflowX = "hidden";
+
+    await playFrames(fromEl, ANIM.out(0, "X"), ANIM.out(-dir, "X"), 170, "ease-in");
+
+    fromEl.style.display = "none";
+    toEl.style.display = toDisplay;
+    if (after) after();
+    fitLayout(true);
+
+    setFrame(toEl, ANIM.in(dir, "X"));
+    await playFrames(toEl, ANIM.in(dir, "X"), ANIM.in(0, "X"), 260, "cubic-bezier(.2,.8,.2,1)");
+
+    clearFrame(toEl);
+    document.body.style.overflowX = "";
+    SWIPE.busy = false;
 }
 
 /* =========================================================
@@ -202,11 +231,11 @@ function renderAchievements() {
     control.appendChild(addBtn);
 }
 
-function onAddAchievement() {
-    const text = prompt("Escribe un objetivo o logro:");
+async function onAddAchievement() {
+    const text = await askText({ title: "Nuevo objetivo", label: "Escribe un objetivo o logro", maxLength: 60, placeholder: "Ej. Dominada con +10 kg" });
     if (!text) return;
 
-    state.achievements.push(text.trim());
+    state.achievements.push(text);
     saveState();
     renderAchievements();
 }
@@ -362,6 +391,20 @@ function renderDots(container, total, index) {
     }
 }
 
+/* Botón de la casita (siempre visible en el encabezado): vuelve a la pantalla de inicio de toda la app,
+   la del perfil. Al volver a entrar, la app empieza en Semana. */
+function goHome() {
+    if (SWIPE.busy) return;
+
+    switchScreen(document.getElementById("mainApp"), document.getElementById("landing"), -1, "flex", () => {
+        selectedDate = null;
+        showSection("week");
+        stopTooltipLoop();
+        startTooltipLoop();
+        window.scrollTo(0, 0);
+    });
+}
+
 function goToWeek() {
     selectedDate = null;
     showSection("week");
@@ -514,7 +557,7 @@ function updateSemaphore(routineId, dayId, exerciseId) {
     CREADOR DE RUTINAS (pestaña "Rutinas")
 ========================================================= */
 
-const EXERCISE_NAME_MAX = 14;
+const EXERCISE_NAME_MAX = 20;
 
 let routineNav = { level: "root", routineId: null, dayId: null, exercisePage: 0 };
 
@@ -637,10 +680,10 @@ function buildRoutinesRoot() {
     return root;
 }
 
-function deleteRoutine(routineId) {
+async function deleteRoutine(routineId) {
     const routine = findRoutine(routineId);
 
-    if (!confirm(`¿Borrar la rutina "${routine.name}" completa, con todos sus días y ejercicios? Esta acción no se puede deshacer.`)) return;
+    if (!await askConfirm({ title: "Borrar rutina", message: `¿Borrar la rutina "${routine.name}" completa, con todos sus días y ejercicios? Esta acción no se puede deshacer.` })) return;
 
     state.routines = state.routines.filter(r => r.id !== routineId);
     saveState();
@@ -656,10 +699,20 @@ function toggleActiveRoutine(routineId) {
 }
 
 function addRoutine() {
-    const name = prompt("Nombre de la rutina:");
-    if (!name) return;
+    openPicker({
+        title: "Nueva rutina",
+        groups: [{ items: ROUTINE_PRESETS.map(p => ({ label: p.name, sub: p.days.join(" · "), value: p })) }],
+        createLabel: "Rutina personalizada",
+        onPick: preset => createRoutine(preset.name, preset.key),
+        onCreate: async () => {
+            const name = await askText({ title: "Rutina personalizada", label: "Nombre de la rutina", maxLength: 24 });
+            if (name) createRoutine(name, null);
+        }
+    });
+}
 
-    const routine = { id: newId("routine"), name: name.trim(), days: [] };
+function createRoutine(name, preset) {
+    const routine = { id: newId("routine"), name, preset, days: [] };
     state.routines.push(routine);
     saveState();
 
@@ -747,17 +800,40 @@ function addDay(routineId) {
     const routine = findRoutine(routineId);
     if (routine.days.length >= 6) return;
 
-    routine.days.push({ id: newId("day"), name: "", customName: false, exercises: [] });
+    /* Opciones según la rutina prefabricada elegida (o todas, si es personalizada); sin repetir las ya creadas */
+    const preset = ROUTINE_PRESETS.find(p => p.key === routine.preset);
+    const used = routine.days.map(d => normalizeText(d.name));
+    const options = (preset ? preset.days : GENERIC_DAYS).filter(n => !used.includes(normalizeText(n)));
+
+    openPicker({
+        title: "Nuevo día",
+        groups: [{ items: options.map(n => ({ label: n, value: n })) }],
+        emptyText: "Ya añadiste todos los días de esta rutina",
+        createLabel: "Día personalizado",
+        onPick: name => createDay(routineId, name),
+        onCreate: async () => {
+            const name = await askText({ title: "Día personalizado", label: "Nombre del día (vacío = \"Día N\")", maxLength: 24, allowEmpty: true });
+            if (name === null) return;
+            createDay(routineId, name);   /* vacío = "Día N" automático */
+        }
+    });
+}
+
+function createDay(routineId, name) {
+    const routine = findRoutine(routineId);
+    if (routine.days.length >= 6) return;
+
+    routine.days.push({ id: newId("day"), name: name || "", customName: !!name, exercises: [] });
     renumberAutoDays(routine);
     saveState();
     renderRoutinesTab();
 }
 
-function deleteDay(routineId, dayId) {
+async function deleteDay(routineId, dayId) {
     const routine = findRoutine(routineId);
     const day = findDay(routine, dayId);
 
-    if (!confirm(`¿Borrar "${day.name}" y todos sus ejercicios? Esta acción no se puede deshacer.`)) return;
+    if (!await askConfirm({ title: "Borrar día", message: `¿Borrar "${day.name}" y todos sus ejercicios? Esta acción no se puede deshacer.` })) return;
 
     routine.days = routine.days.filter(d => d.id !== dayId);
     renumberAutoDays(routine);
@@ -765,14 +841,14 @@ function deleteDay(routineId, dayId) {
     renderRoutinesTab();
 }
 
-function renameDay(routineId, dayId) {
+async function renameDay(routineId, dayId) {
     const routine = findRoutine(routineId);
     const day = findDay(routine, dayId);
 
-    const name = prompt("Nombre del día:", day.name);
+    const name = await askText({ title: "Renombrar día", label: "Nombre del día", value: day.name, maxLength: 24 });
     if (!name) return;
 
-    day.name = name.trim();
+    day.name = name;
     day.customName = true;
     saveState();
     renderRoutinesTab();
@@ -842,13 +918,36 @@ function addRoutineExercise(routineId, dayId) {
 
     const currentPages = Math.ceil(day.exercises.length / EXERCISES_PER_PAGE);
     if (day.exercises.length % EXERCISES_PER_PAGE === 0 && currentPages >= MAX_EXERCISE_PAGES) {
-        alert(`Máximo ${MAX_EXERCISE_PAGES} páginas de ejercicios por día.`);
+        showMessage({ title: "Límite alcanzado", message: `Máximo ${MAX_EXERCISE_PAGES} páginas de ejercicios por día.` });
         return;
     }
 
-    let name = prompt(`Nombre del ejercicio (máx. ${EXERCISE_NAME_MAX} caracteres):`);
-    if (!name) return;
-    name = name.trim().slice(0, EXERCISE_NAME_MAX);
+    /* Grupos musculares del día primero (Push: pecho, hombro, tríceps...), sin repetir los ya añadidos */
+    const used = day.exercises.map(e => normalizeText(e.name));
+    const priority = priorityGroups(day.name);
+    const groups = Object.entries(EXERCISE_CATALOG)
+        .sort(([a], [b]) => priorityIndex(priority, a) - priorityIndex(priority, b))
+        .map(([title, names]) => ({
+            title,
+            items: names.filter(n => !used.includes(normalizeText(n))).map(n => ({ label: n, value: n }))
+        }));
+
+    openPicker({
+        title: "Añadir ejercicio",
+        groups,
+        searchable: true,
+        createLabel: "Nuevo ejercicio",
+        onPick: name => createExercise(routineId, dayId, name),
+        onCreate: async query => {
+            const name = await askText({ title: "Nuevo ejercicio", label: `Nombre del ejercicio (máx. ${EXERCISE_NAME_MAX} caracteres)`, value: query || "", maxLength: EXERCISE_NAME_MAX });
+            if (name) createExercise(routineId, dayId, name);
+        }
+    });
+}
+
+function createExercise(routineId, dayId, name) {
+    const day = findDay(findRoutine(routineId), dayId);
+    name = name.slice(0, EXERCISE_NAME_MAX).trim();
     if (!name) return;
 
     day.exercises.push({
@@ -864,12 +963,12 @@ function addRoutineExercise(routineId, dayId) {
     renderRoutinesTab();
 }
 
-function deleteRoutineExercise(routineId, dayId, exerciseIndex) {
+async function deleteRoutineExercise(routineId, dayId, exerciseIndex) {
     const routine = findRoutine(routineId);
     const day = findDay(routine, dayId);
     const exercise = day.exercises[exerciseIndex];
 
-    if (!confirm(`¿Borrar el ejercicio "${exercise.name}"? Esta acción no se puede deshacer.`)) return;
+    if (!await askConfirm({ title: "Borrar ejercicio", message: `¿Borrar el ejercicio "${exercise.name}"? Esta acción no se puede deshacer.` })) return;
 
     day.exercises.splice(exerciseIndex, 1);
     saveState();
@@ -966,20 +1065,21 @@ function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, v
     if (serie.target !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(serie.target));
 }
 
-function setCustomRoutineKg(routineId, dayId, exerciseIndex) {
+async function setCustomRoutineKg(routineId, dayId, exerciseIndex) {
     const day = findDay(findRoutine(routineId), dayId);
     const exercise = day.exercises[exerciseIndex];
 
-    const value = prompt("Introduce el peso personalizado (kg/lbs):", exercise.kg);
+    const value = await askText({
+        title: "Peso personalizado",
+        label: "Peso (kg/lbs)",
+        value: String(exercise.kg),
+        inputMode: "decimal",
+        maxLength: 7,
+        validate: v => { const n = parseFloat(v.replace(",", ".")); return (isNaN(n) || n < 0) ? "Introduce un peso válido." : ""; }
+    });
     if (value === null) return;
 
-    const number = parseFloat(value.replace(",", "."));
-    if (isNaN(number) || number < 0) {
-        alert("Introduce un peso válido.");
-        return;
-    }
-
-    exercise.kg = number;
+    exercise.kg = parseFloat(value.replace(",", "."));
     saveState();
     renderRoutinesTab();
 }
@@ -1054,6 +1154,338 @@ function attachValueSwipe(el, onStep) {
     const end = () => { lastY = null; pointer = null; };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
+}
+
+
+/* =========================================================
+    MENÚ EMERGENTE (rutinas, días y ejercicios prefabricados)
+    Una ventana flotante sobre la app (no es una sección): buscador arriba
+    (solo en ejercicios), lista en el medio y botón de "crear" abajo.
+    Así se escribe menos con el teclado.
+========================================================= */
+
+const ROUTINE_PRESETS = [
+    { key: "tp",  name: "Torso-Pierna",   days: ["Torso", "Pierna"] },
+    { key: "ppl", name: "Push-Pull-Legs", days: ["Push", "Pull", "Legs"] },
+    { key: "fb",  name: "Full Body",      days: ["Full Body A", "Full Body B", "Full Body C"] }
+];
+
+const GENERIC_DAYS = ["Push", "Pull", "Legs", "Torso", "Pierna", "Full Body"];
+
+/* Todos los nombres caben en EXERCISE_NAME_MAX caracteres */
+const EXERCISE_CATALOG = {
+    "Pecho": ["Press banca", "Press inclinado", "Press declinado", "Press mancuernas", "Aperturas", "Cruce de poleas", "Pec deck", "Fondos", "Flexiones"],
+    "Espalda": ["Dominadas", "Jalón al pecho", "Remo con barra", "Remo mancuerna", "Remo T", "Remo polea baja", "Pullover polea", "Peso muerto"],
+    "Hombro": ["Press militar", "Press hombro", "Elev. laterales", "Elev. frontales", "Pájaros", "Face pull", "Encogimientos"],
+    "Bíceps": ["Curl barra", "Curl mancuernas", "Curl martillo", "Curl predicador", "Curl inclinado", "Curl polea"],
+    "Tríceps": ["Press francés", "Extensión polea", "Ext. sobre cabeza", "Press cerrado", "Fondos tríceps", "Patada tríceps"],
+    "Pierna": ["Sentadilla", "Sentadilla frontal", "Prensa", "Zancadas", "Sentadilla búlgara", "Ext. cuádriceps", "Curl femoral", "Peso muerto rumano", "Gemelos"],
+    "Glúteo": ["Hip thrust", "Puente de glúteo", "Patada de glúteo", "Abductores"],
+    "Core": ["Plancha", "Crunch", "Elev. de piernas", "Rueda abdominal", "Russian twist"]
+};
+
+const DAY_GROUPS = [
+    [/push/, ["Pecho", "Hombro", "Tríceps"]],
+    [/pull/, ["Espalda", "Bíceps"]],
+    [/leg|pierna/, ["Pierna", "Glúteo", "Core"]],
+    [/torso|upper/, ["Pecho", "Espalda", "Hombro", "Bíceps", "Tríceps"]]
+];
+
+function normalizeText(text) {
+    return String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+function priorityGroups(dayName) {
+    const n = normalizeText(dayName);
+    const hit = DAY_GROUPS.find(([re]) => re.test(n));
+    return hit ? hit[1] : [];
+}
+
+function priorityIndex(priority, group) {
+    const i = priority.indexOf(group);
+    return i === -1 ? 99 : i;
+}
+
+let pickerOverlay = null;
+
+/* options: { title, groups: [{ title?, items: [{ label, sub?, value }] }], searchable, createLabel, emptyText, onPick(value), onCreate(query) } */
+function openPicker(options) {
+    closePicker(true);
+
+    const overlay = document.createElement("div");
+    overlay.className = "picker-overlay";
+
+    const sheet = document.createElement("div");
+    sheet.className = "picker-sheet";
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+
+    const head = document.createElement("div");
+    head.className = "picker-head";
+    const title = document.createElement("h3");
+    title.className = "picker-title";
+    title.textContent = options.title;
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "picker-close";
+    closeBtn.setAttribute("aria-label", "Cerrar");
+    closeBtn.textContent = "✕";
+    closeBtn.onclick = () => closePicker();
+    head.append(title, closeBtn);
+    sheet.appendChild(head);
+
+    let search = null;
+    if (options.searchable) {
+        search = document.createElement("input");
+        search.type = "search";
+        search.className = "picker-search";
+        search.placeholder = "Buscar…";
+        search.autocomplete = "off";
+        search.spellcheck = false;
+        sheet.appendChild(search);
+    }
+
+    const list = document.createElement("div");
+    list.className = "picker-list";
+    sheet.appendChild(list);
+
+    const createBtn = document.createElement("button");
+    createBtn.className = "picker-create";
+    createBtn.textContent = `+ ${options.createLabel}`;
+    createBtn.onclick = () => {
+        const query = search ? search.value.trim() : "";
+        closePicker();
+        options.onCreate(query);
+    };
+    sheet.appendChild(createBtn);
+
+    const renderList = () => {
+        const query = search ? normalizeText(search.value) : "";
+        list.innerHTML = "";
+        let count = 0;
+
+        options.groups.forEach(group => {
+            const items = group.items.filter(item => !query || normalizeText(item.label).includes(query));
+            if (!items.length) return;
+
+            if (group.title) {
+                const heading = document.createElement("div");
+                heading.className = "picker-group";
+                heading.textContent = group.title;
+                list.appendChild(heading);
+            }
+
+            items.forEach(item => {
+                const btn = document.createElement("button");
+                btn.className = "picker-item";
+                const label = document.createElement("span");
+                label.textContent = item.label;
+                btn.appendChild(label);
+                if (item.sub) {
+                    const sub = document.createElement("small");
+                    sub.textContent = item.sub;
+                    btn.appendChild(sub);
+                }
+                btn.onclick = () => {
+                    closePicker();
+                    options.onPick(item.value);
+                };
+                list.appendChild(btn);
+                count++;
+            });
+        });
+
+        if (!count) {
+            const empty = document.createElement("p");
+            empty.className = "picker-empty";
+            empty.textContent = query ? "Sin resultados. Puedes crearlo con el botón de abajo." : (options.emptyText || "Sin opciones");
+            list.appendChild(empty);
+        }
+    };
+
+    if (search) search.addEventListener("input", renderList);
+    renderList();
+
+    overlay.addEventListener("pointerdown", e => { if (e.target === overlay) closePicker(); });
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+    pickerOverlay = overlay;
+
+    overlay.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "ease-out" });
+    sheet.animate(
+        [{ transform: "scale(0.84) translateY(6%)", opacity: 0 }, { transform: "none", opacity: 1 }],
+        { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" }
+    );
+}
+
+function closePicker(immediate) {
+    const overlay = pickerOverlay;
+    if (!overlay) return;
+    pickerOverlay = null;
+
+    if (immediate) { overlay.remove(); return; }
+
+    const sheet = overlay.firstElementChild;
+    overlay.style.pointerEvents = "none";
+    sheet.animate([{ transform: "none", opacity: 1 }, { transform: "scale(0.9) translateY(4%)", opacity: 0 }], { duration: 140, easing: "ease-in", fill: "forwards" });
+    overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: "forwards" }).finished.then(() => overlay.remove()).catch(() => overlay.remove());
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !dialogOverlay) closePicker(); });
+
+
+/* =========================================================
+    CUADROS DE DIÁLOGO PROPIOS (reemplazan prompt / confirm / alert del navegador)
+    Misma ventana flotante que el menú de selección. Devuelven una promesa:
+      askText(...)    -> texto (sin espacios en los extremos) o null si se cancela
+      askConfirm(...) -> true / false
+      showMessage(...)-> se resuelve al cerrarlo
+========================================================= */
+
+let dialogOverlay = null;
+
+function openDialog({ title, message, input, buttons, validate }) {
+    return new Promise(resolve => {
+        if (dialogOverlay) { dialogOverlay.remove(); dialogOverlay = null; }
+
+        const overlay = document.createElement("div");
+        overlay.className = "picker-overlay dialog-overlay";
+
+        const sheet = document.createElement("form");
+        sheet.className = "picker-sheet dialog-sheet";
+        sheet.setAttribute("role", "dialog");
+        sheet.setAttribute("aria-modal", "true");
+        sheet.noValidate = true;
+
+        const heading = document.createElement("h3");
+        heading.className = "picker-title dialog-title";
+        heading.textContent = title;
+        sheet.appendChild(heading);
+
+        if (message) {
+            const text = document.createElement("p");
+            text.className = "dialog-text";
+            text.textContent = message;
+            sheet.appendChild(text);
+        }
+
+        let field = null, error = null;
+        if (input) {
+            field = document.createElement("input");
+            field.className = "dialog-input";
+            field.type = "text";
+            field.value = input.value || "";
+            field.placeholder = input.placeholder || "";
+            if (input.maxLength) field.maxLength = input.maxLength;
+            if (input.inputMode) field.inputMode = input.inputMode;
+            field.autocomplete = "off";
+            field.spellcheck = false;
+            field.setAttribute("aria-label", input.label || title);
+
+            if (input.label) {
+                const label = document.createElement("label");
+                label.className = "dialog-text";
+                label.textContent = input.label;
+                sheet.appendChild(label);
+            }
+            sheet.appendChild(field);
+
+            error = document.createElement("div");
+            error.className = "dialog-error";
+            sheet.appendChild(error);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "dialog-actions";
+        sheet.appendChild(actions);
+
+        let finished = false;
+        const finish = value => {
+            if (finished) return;
+            finished = true;
+            window.removeEventListener("keydown", onKey, true);
+            dialogOverlay = null;
+
+            overlay.style.pointerEvents = "none";
+            sheet.animate([{ transform: "none", opacity: 1 }, { transform: "scale(0.9) translateY(4%)", opacity: 0 }], { duration: 130, easing: "ease-in", fill: "forwards" });
+            overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, fill: "forwards" }).finished.then(() => overlay.remove()).catch(() => overlay.remove());
+            resolve(value);
+        };
+
+        const submit = button => {
+            if (!button.confirm) { finish(button.cancelValue); return; }
+            if (!field) { finish(button.value); return; }
+
+            const text = field.value.trim();
+            let problem = "";
+            if (!text && !input.allowEmpty) problem = "Escribe algo para continuar.";
+            else if (validate && text) problem = validate(text) || "";
+            else if (input.validate && text) problem = input.validate(text) || "";
+
+            if (problem) { error.textContent = problem; field.focus(); return; }
+            finish(text);
+        };
+
+        buttons.forEach(b => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = `dialog-btn ${b.kind || "ghost"}`;
+            btn.textContent = b.label;
+            btn.onclick = () => submit(b);
+            actions.appendChild(btn);
+            b._el = btn;
+        });
+
+        const confirmButton = buttons.find(b => b.confirm);
+        const cancelButton = buttons.find(b => !b.confirm) || confirmButton;
+
+        sheet.addEventListener("submit", e => { e.preventDefault(); submit(confirmButton); });
+        if (field) field.addEventListener("input", () => { error.textContent = ""; });
+
+        const onKey = e => { if (e.key === "Escape") { e.stopPropagation(); submit(cancelButton); } };
+        window.addEventListener("keydown", onKey, true);
+
+        overlay.addEventListener("pointerdown", e => { if (e.target === overlay) submit(cancelButton); });
+
+        overlay.appendChild(sheet);
+        document.body.appendChild(overlay);
+        dialogOverlay = overlay;
+
+        overlay.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "ease-out" });
+        sheet.animate([{ transform: "scale(0.84) translateY(6%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" });
+
+        const focusTarget = field || confirmButton._el;
+        setTimeout(() => { focusTarget.focus(); if (field) field.select(); }, 60);
+    });
+}
+
+function askText({ title, label, value, placeholder, maxLength, inputMode, allowEmpty, validate, confirmLabel }) {
+    return openDialog({
+        title,
+        input: { label, value, placeholder, maxLength, inputMode, allowEmpty, validate },
+        buttons: [
+            { label: "Cancelar", kind: "ghost", confirm: false, cancelValue: null },
+            { label: confirmLabel || "Aceptar", kind: "primary", confirm: true }
+        ]
+    });
+}
+
+function askConfirm({ title, message, confirmLabel, danger = true }) {
+    return openDialog({
+        title,
+        message,
+        buttons: [
+            { label: "Cancelar", kind: "ghost", confirm: false, cancelValue: false },
+            { label: confirmLabel || "Borrar", kind: danger ? "danger" : "primary", confirm: true, value: true }
+        ]
+    });
+}
+
+function showMessage({ title, message }) {
+    return openDialog({
+        title,
+        message,
+        buttons: [{ label: "Entendido", kind: "primary", confirm: true, value: true, cancelValue: undefined }]
+    });
 }
 
 /* =========================================================
