@@ -668,7 +668,6 @@ main::-webkit-scrollbar { display: none; }
 ========================================================= */
 
 header, main { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
-#workout.section.active { touch-action: none; }  /* en Entreno el deslizamiento vertical cambia de página */
 main { overflow-x: hidden; }
 
 .tab-dots, #workoutDots { display: flex; justify-content: center; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -879,6 +878,110 @@ main { overflow-x: hidden; }
 }
 
 .dialog-btn.ghost { background: var(--glass-bg); color: #ccc; }
-.dialog-btn.primary { background: rgba(76, 175, 109, 0.22); border-color: var(--accent); }
+.dialog-btn.accept { background: rgba(76, 175, 109, 0.22); border-color: var(--accent); }
 .dialog-btn.danger { background: rgba(224, 85, 85, 0.22); border-color: var(--accent-red); }
 .dialog-btn:active { filter: brightness(1.3); }
+
+/* =========================================================
+    CUADRO PARA CAMBIAR UN NÚMERO (peso / repeticiones)
+========================================================= */
+
+.stepper-overlay { z-index: 1050; }
+
+.stepper-sheet { width: min(100%, 320px); max-height: none; padding: 18px; align-items: stretch; text-align: center; }
+.stepper-title { font-size: 18px; margin-bottom: 2px; }
+.stepper-sub { color: #9a9a9a; font-size: 13px; margin-bottom: 12px; }
+
+.stepper-btn {
+    height: 54px;
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    background: var(--glass-bg-strong);
+    color: #ddd;
+    font-size: 20px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.stepper-btn:active { background: rgba(76, 175, 109, 0.28); color: #fff; }
+
+.stepper-value {
+    height: 118px;
+    margin: 8px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    font-size: 54px;
+    font-weight: bold;
+    overflow: hidden;
+    touch-action: none;
+    cursor: ns-resize;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.stepper-value .v { display: inline-block; will-change: transform, opacity; }
+.stepper-unit { margin: 4px 0 8px; color: #888; font-size: 13px; letter-spacing: 1px; }
+.stepper-hint { margin: 10px 0 2px; color: #6f6f6f; font-size: 11px; }
+.stepper-sheet .dialog-actions { margin-top: 12px; }
+
+/* Respaldo e historial por meses */
+.backup-row { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; }
+.backup-btn { padding: 7px 12px; font-size: 12px; border-radius: 10px; color: #ddd; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); cursor: pointer; }
+.backup-btn:active { background: rgba(255,255,255,.12); }
+.history-nav { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.history-nav h2 { margin: 0; min-width: 150px; text-align: center; }
+.history-arrow { width: 34px; height: 34px; padding: 0; margin: 0; border-radius: 50%; font-size: 20px; line-height: 1; color: #ddd; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); cursor: pointer; }
+.history-arrow:disabled { opacity: .3; }
+
+/* =========================================================
+    COMIDA (contador de calorías)
+========================================================= */
+#food.section.active { overflow: hidden; }
+#foodContent { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(10px * var(--k)); }
+
+.food-summary, .food-chip, .food-row {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+.food-summary { border-radius: 16px; padding: calc(12px * var(--k)) 14px; flex-shrink: 0; }
+.food-kcal { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.food-kcal b { font-size: 34px; line-height: 1; }
+.food-kcal span { color: #9a9a9a; font-size: 13px; }
+.food-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .08); margin: calc(8px * var(--k)) 0; overflow: hidden; }
+.food-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+.food-macros { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: #8d8d8d; }
+.food-macros b { color: #e8e8e8; display: block; font-size: 13px; }
+.food-macros span { text-align: center; flex: 1; }
+
+.food-groups { display: grid; grid-template-columns: 1fr 1fr; gap: calc(8px * var(--k)); flex-shrink: 0; }
+.food-chip {
+    position: relative; overflow: hidden; text-align: left; color: #fff; cursor: pointer;
+    border-radius: 12px; padding: calc(9px * var(--k)) 12px calc(12px * var(--k)); margin: 0;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px;
+}
+.food-chip .fc-val { color: #9a9a9a; font-size: 12px; white-space: nowrap; }
+.food-chip .fc-val b { color: #fff; font-size: 15px; }
+.food-chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c); transition: width .3s; }
+.food-chip.over .fc-val b { color: var(--accent-gold); }
+.food-chip:active { background: rgba(255, 255, 255, .12); }
+.food-add { justify-content: center; align-items: center; color: var(--accent); font-weight: bold; }
+
+.food-list-title { color: #8d8d8d; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; flex-shrink: 0; }
+.food-list { flex: 1; min-height: 70px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: none; touch-action: pan-y; }
+.food-list::-webkit-scrollbar { display: none; }
+.food-empty { color: #6f6f6f; font-size: 12px; text-align: center; margin: 14px 8px; }
+.food-row { display: flex; align-items: center; gap: 10px; border-radius: 12px; padding: 8px 8px 8px 12px; flex-shrink: 0; }
+.food-row .fr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.food-row .fr-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.food-row .fr-name small { display: block; color: #8d8d8d; font-size: 11px; }
+.food-row .fr-kcal { font-size: 12px; color: #cfcfcf; white-space: nowrap; }
+.food-row .fr-del { width: 32px; height: 32px; padding: 0; margin: 0; border-radius: 50%; background: none; border: none; color: #888; font-size: 13px; cursor: pointer; }
+.food-row .fr-del:active { background: rgba(255, 255, 255, .1); color: #fff; }
