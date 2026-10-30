@@ -1,13 +1,14 @@
 /* Service worker: cachea los archivos de la app para que funcione offline
    e instalada. Estrategia: cache-first con fallback a red. */
 
-const CACHE_NAME = "qpeeg-cache-v9";
+const CACHE_NAME = "qpeeg-cache-v17";
 
 const CORE_ASSETS = [
     "./",
     "./index.html",
     "./styles/stylesheet.css",
     "./scripts/scripts.js",
+    "./scripts/food.js",
     "./manifest.json",
     "./icons/icon-192.png",
     "./icons/icon-512.png",

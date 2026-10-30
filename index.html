@@ -45,6 +45,12 @@
         <div id="achievementsControl"></div>
     </div>
 
+    <div class="backup-row">
+        <button id="exportBtn" class="backup-btn">Exportar respaldo</button>
+        <button id="importBtn" class="backup-btn">Importar respaldo</button>
+        <input type="file" id="importInput" accept="application/json,.json" hidden>
+    </div>
+
     <p class="footer-note">
         Esta app está en desarrollo y aún puede mejorar, se ejecuta de forma
         local y no necesita internet, gracias por escoger este proyecto
@@ -108,9 +114,18 @@
             <div id="routinesContainer"></div>
         </section>
 
+        <!-- COMIDA -->
+        <section id="food" class="section">
+            <div id="foodContent"></div>
+        </section>
+
         <!-- HISTORIAL -->
         <section id="history" class="section">
-            <h2 id="historyTitle"></h2>
+            <div class="history-nav">
+                <button id="histPrev" class="history-arrow" aria-label="Mes anterior">‹</button>
+                <h2 id="historyTitle"></h2>
+                <button id="histNext" class="history-arrow" aria-label="Mes siguiente">›</button>
+            </div>
             <div id="historyGrid" class="history-grid"></div>
         </section>
 
@@ -119,5 +134,6 @@
 </div>
 
 <script src="scripts/scripts.js"></script>
+<script src="scripts/food.js"></script>
 </body>
 </html>
