@@ -19,7 +19,8 @@ const DEFAULT_STATE = {
     achievements: [],
     routines: [],
     activeRoutineId: null,
-    logs: {}
+    logs: {},
+    food: { log: {} }
 };
 
 let state = loadState();
@@ -34,8 +35,70 @@ function loadState() {
     }
 }
 
+let saveWarned = false;
 function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
+    } catch (e) {
+        if (!saveWarned) {
+            saveWarned = true;
+            showMessage({ title: "No se pudo guardar", message: "El almacenamiento del teléfono está lleno o bloqueado. Exporta un respaldo y libera espacio." });
+        }
+        return false;
+    }
+}
+
+/* Reduce la foto a ~320px (JPEG) para que ocupe pocos KB */
+function shrinkImage(file, max = 320) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const k = Math.min(1, max / Math.max(img.width, img.height));
+            const c = document.createElement("canvas");
+            c.width = Math.round(img.width * k);
+            c.height = Math.round(img.height * k);
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            resolve(c.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img")); };
+        img.src = url;
+    });
+}
+
+/* ---------- Respaldo ---------- */
+function exportBackup() {
+    const blob = new Blob([JSON.stringify({ app: "qpeeg", version: 1, state }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `qpeeg-respaldo-${dateKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function importBackup(file) {
+    let data;
+    try {
+        data = JSON.parse(await file.text());
+    } catch (e) { data = null; }
+    const st = data && data.app === "qpeeg" ? data.state : null;
+    if (!st || !Array.isArray(st.routines) || typeof st.logs !== "object") {
+        showMessage({ title: "Archivo no válido", message: "Ese archivo no es un respaldo de Q.P.E.E.G." });
+        return;
+    }
+    const ok = await askConfirm({
+        title: "Importar respaldo",
+        message: "Esto reemplazará todos tus datos actuales por los del respaldo.",
+        confirmLabel: "Reemplazar",
+        danger: true
+    });
+    if (!ok) return;
+    state = Object.assign(structuredClone(DEFAULT_STATE), st);
+    if (saveState()) location.reload();
 }
 
 function getDateText(date = new Date()) {
@@ -123,6 +186,10 @@ function initLanding() {
 
     document.getElementById("profilePhoto").addEventListener("click", onProfilePhotoClick);
     document.getElementById("photoInput").addEventListener("change", onPhotoSelected);
+    document.getElementById("exportBtn").addEventListener("click", exportBackup);
+    const imp = document.getElementById("importInput");
+    document.getElementById("importBtn").addEventListener("click", () => imp.click());
+    imp.addEventListener("change", () => { if (imp.files[0]) importBackup(imp.files[0]); imp.value = ""; });
 }
 
 function startTooltipLoop() {
@@ -151,16 +218,14 @@ function onPhotoSelected(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-        state.photo = reader.result;
+    shrinkImage(file).then(data => {
+        state.photo = data;
         saveState();
-
         document.getElementById("profileImg").src = state.photo;
         document.getElementById("profileImg").style.display = "block";
         document.getElementById("profilePlaceholder").style.display = "none";
-    };
-    reader.readAsDataURL(file);
+    }).catch(() => showMessage({ title: "Foto no válida", message: "No se pudo leer esa imagen." }));
+    event.target.value = "";
 }
 
 function enterApp(animated) {
@@ -248,6 +313,7 @@ async function onAddAchievement() {
 const TAB_ORDER = [
     { id: "week", label: "SEMANA" },
     { id: "exercises", label: "RUTINAS" },
+    { id: "food", label: "COMIDA" },
     { id: "history", label: "HISTORIAL" }
 ];
 
@@ -367,6 +433,9 @@ function showSection(sectionId) {
         const day = findDay(findRoutine(activeWorkout.routineId), activeWorkout.dayId);
         setHeaderDateText(day ? day.name : "");
         renderWorkoutForDay(activeWorkout.routineId, activeWorkout.dayId);
+    } else if (sectionId === "food") {
+        setHeaderDateText(getDateText());
+        renderFood();
     } else if (sectionId === "history") {
         setHeaderDateText(getDateText());
         renderHistory();
@@ -441,6 +510,9 @@ function renderWorkoutForDay(routineId, dayId) {
 
     container.appendChild(page);
 
+    /* El semáforo se pinta con las tarjetas ya dentro del documento */
+    day.exercises.slice(start, start + EXERCISES_PER_SCREEN).forEach(exercise => updateSemaphore(routineId, dayId, exercise.id));
+
     renderDots(document.getElementById("workoutDots"), totalPages, workoutPage);
 }
 
@@ -473,7 +545,15 @@ function buildExerciseCard(routineId, dayId, exerciseId) {
     const kgBox = document.createElement("div");
     kgBox.className = "kg-carousel";
     kgBox.innerHTML = `<div class="kg-value" id="kg-${exerciseId}">${log.kg} kg</div>`;
-    attachValueSwipe(kgBox.querySelector(".kg-value"), dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP));
+    attachValueSwipe(kgBox.querySelector(".kg-value"), dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP), () => openStepper({
+        title: ex.name,
+        subtitle: "Peso",
+        unit: "kg",
+        read: () => String(readExerciseLog(routineId, getWorkoutDateKey(), getWorkoutExercise(routineId, dayId, exerciseId)).kg),
+        step: dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP),
+        onType: () => setCustomWorkoutKg(routineId, dayId, exerciseId),
+        onClose: refreshWorkout
+    }));
     card.appendChild(kgBox);
 
     const seriesRow = document.createElement("div");
@@ -502,7 +582,14 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
             <div class="reps-value">${log.reps[index]}</div>
         `;
         const valueBox = wrap.querySelector(".reps-value");
-        attachValueSwipe(valueBox, dir => changeWorkoutReps(routineId, dayId, exerciseId, index, dir, valueBox));
+        attachValueSwipe(valueBox, dir => changeWorkoutReps(routineId, dayId, exerciseId, index, dir, valueBox), () => openStepper({
+            title: ex.name,
+            subtitle: `Serie ${toRoman(index + 1)} · repeticiones (meta ${ex.series[index].target})`,
+            unit: "reps",
+            read: () => String(readExerciseLog(routineId, getWorkoutDateKey(), getWorkoutExercise(routineId, dayId, exerciseId)).reps[index]),
+            step: dir => changeWorkoutReps(routineId, dayId, exerciseId, index, dir, null),
+            onClose: refreshWorkout
+        }));
         row.appendChild(wrap);
     });
 
@@ -525,7 +612,7 @@ function changeWorkoutReps(routineId, dayId, exerciseId, index, delta, valueBox)
     log.reps[index] = Math.max(0, before + delta);
     saveState();
 
-    if (log.reps[index] !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(log.reps[index]));
+    if (valueBox && log.reps[index] !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(log.reps[index]));
     updateSemaphore(routineId, dayId, exerciseId);
     renderSeriesPanel();
 }
@@ -1008,7 +1095,15 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
     kgBox.className = "kg-carousel";
     kgBox.innerHTML = `<div class="kg-value long-pressable">${exercise.kg} kg/lbs</div>`;
     const kgValue = kgBox.querySelector(".kg-value");
-    attachValueSwipe(kgValue, dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, kgValue));
+    attachValueSwipe(kgValue, dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, kgValue), () => openStepper({
+        title: exercise.name,
+        subtitle: "Peso",
+        unit: "kg/lbs",
+        read: () => String(findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].kg),
+        step: dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, null),
+        onType: () => setCustomRoutineKg(routineId, dayId, exerciseIndex),
+        onClose: renderRoutinesTab
+    }));
     attachLongPress(kgValue, () => setCustomRoutineKg(routineId, dayId, exerciseIndex));
     card.appendChild(kgBox);
 
@@ -1023,7 +1118,14 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
             <div class="reps-value">${serie.target}</div>
         `;
         const repsValue = el.querySelector(".reps-value");
-        attachValueSwipe(repsValue, dir => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, dir, repsValue));
+        attachValueSwipe(repsValue, dir => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, dir, repsValue), () => openStepper({
+            title: exercise.name,
+            subtitle: `Serie ${toRoman(serieIndex + 1)} · repeticiones objetivo`,
+            unit: "reps",
+            read: () => String(findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].series[serieIndex].target),
+            step: dir => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, dir, null),
+            onClose: renderRoutinesTab
+        }));
         attachLongPress(repsValue, () => removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex));
         seriesRow.appendChild(el);
     });
@@ -1052,7 +1154,7 @@ function changeRoutineKg(routineId, dayId, exerciseIndex, delta, valueBox) {
     const before = exercise.kg;
     exercise.kg = Math.max(0, exercise.kg + delta);
     saveState();
-    if (exercise.kg !== before) animateValue(valueBox, delta > 0 ? 1 : -1, `${exercise.kg} kg/lbs`);
+    if (valueBox && exercise.kg !== before) animateValue(valueBox, delta > 0 ? 1 : -1, `${exercise.kg} kg/lbs`);
 }
 
 function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, valueBox) {
@@ -1062,7 +1164,7 @@ function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, v
     const before = serie.target;
     serie.target = Math.max(0, serie.target + delta);
     saveState();
-    if (serie.target !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(serie.target));
+    if (valueBox && serie.target !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(serie.target));
 }
 
 async function setCustomRoutineKg(routineId, dayId, exerciseIndex) {
@@ -1130,30 +1232,202 @@ function attachLongPress(el, callback) {
    un paso cada VALUE_STEP_PX píxeles, con la animación del número. */
 const VALUE_STEP_PX = 26;
 
-function attachValueSwipe(el, onStep) {
-    let lastY = null, pointer = null;
+/* Deslizar sobre el número lo sube/baja (un paso cada stepPx px). Un toque corto (sin mover) llama a onTap. */
+function attachValueSwipe(el, onStep, onTap, stepPx = VALUE_STEP_PX) {
+    let lastY = null, pointer = null, startX = 0, startY = 0, startT = 0, moved = false;
 
     el.addEventListener("pointerdown", e => {
         if (e.pointerType === "mouse" && e.button !== 0) return;
-        lastY = e.clientY;
+        lastY = startY = e.clientY;
+        startX = e.clientX;
+        startT = performance.now();
+        moved = false;
         pointer = e.pointerId;
         try { el.setPointerCapture(pointer); } catch (err) {}
     });
 
     el.addEventListener("pointermove", e => {
         if (lastY === null || e.pointerId !== pointer) return;
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) moved = true;
+
         let dy = e.clientY - lastY;
-        while (Math.abs(dy) >= VALUE_STEP_PX) {
+        while (Math.abs(dy) >= stepPx) {
             const dir = dy < 0 ? 1 : -1;          /* arriba = subir */
             onStep(dir);
-            lastY -= dir * VALUE_STEP_PX;
+            lastY -= dir * stepPx;
             dy = e.clientY - lastY;
         }
     });
 
-    const end = () => { lastY = null; pointer = null; };
-    el.addEventListener("pointerup", end);
-    el.addEventListener("pointercancel", end);
+    el.addEventListener("pointerup", () => {
+        const tap = lastY !== null && !moved && onTap && performance.now() - startT < 400;
+        lastY = null; pointer = null;
+        if (tap) onTap();
+    });
+    el.addEventListener("pointercancel", () => { lastY = null; pointer = null; });
+}
+
+function refreshWorkout() {
+    renderWorkoutForDay(activeWorkout.routineId, activeWorkout.dayId);
+    renderSeriesPanel();
+}
+
+/* Peso exacto en Entreno (como ya existía en Rutinas) */
+async function setCustomWorkoutKg(routineId, dayId, exerciseId) {
+    const ex = getWorkoutExercise(routineId, dayId, exerciseId);
+    const current = readExerciseLog(routineId, getWorkoutDateKey(), ex).kg;
+
+    const value = await askText({
+        title: "Peso exacto",
+        label: "Peso (kg/lbs)",
+        value: String(current),
+        inputMode: "decimal",
+        maxLength: 7,
+        validate: v => { const n = parseFloat(v.replace(",", ".")); return (isNaN(n) || n < 0) ? "Introduce un peso válido." : ""; }
+    });
+    if (value === null) return;
+
+    const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
+    log.kg = parseFloat(value.replace(",", "."));
+    saveState();
+}
+
+/* =========================================================
+    CUADRO PARA CAMBIAR UN NÚMERO (toque corto sobre peso o repeticiones)
+    Ventana más grande que el cuadro original: un área grande para deslizar
+    arriba/abajo, botones ▲ ▼ (mantenerlos presionados repite) y, en el peso,
+    un acceso para escribirlo exacto.
+========================================================= */
+
+let stepperOverlay = null;
+
+function openStepper({ title, subtitle, unit, read, step, onType, onClose, doneLabel, cancelLabel }) {
+    if (stepperOverlay) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "picker-overlay stepper-overlay";
+
+    const sheet = document.createElement("div");
+    sheet.className = "picker-sheet stepper-sheet";
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+
+    const heading = document.createElement("h3");
+    heading.className = "picker-title stepper-title";
+    heading.textContent = title;
+    const sub = document.createElement("div");
+    sub.className = "stepper-sub";
+    sub.textContent = subtitle;
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "stepper-btn";
+    up.setAttribute("aria-label", "Subir");
+    up.textContent = "▲";
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "stepper-btn";
+    down.setAttribute("aria-label", "Bajar");
+    down.textContent = "▼";
+
+    const box = document.createElement("div");
+    box.className = "stepper-value";
+    box.textContent = read();
+
+    const unitEl = document.createElement("div");
+    unitEl.className = "stepper-unit";
+    unitEl.textContent = unit;
+
+    const hint = document.createElement("div");
+    hint.className = "stepper-hint";
+    hint.textContent = "Desliza sobre el número o usa ▲ ▼";
+
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    if (onType) {
+        const typeBtn = document.createElement("button");
+        typeBtn.type = "button";
+        typeBtn.className = "dialog-btn ghost";
+        typeBtn.textContent = "Escribir";
+        typeBtn.onclick = async () => { if (!ready()) return; await onType(); box.textContent = read(); };
+        actions.appendChild(typeBtn);
+    }
+    if (cancelLabel) {
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "dialog-btn ghost";
+        cancelBtn.textContent = cancelLabel;
+        cancelBtn.onclick = () => { if (ready()) close(false); };
+        actions.appendChild(cancelBtn);
+    }
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "dialog-btn accept";
+    done.textContent = doneLabel || "Listo";
+    actions.appendChild(done);
+
+    sheet.append(heading, sub, up, box, unitEl, down, hint, actions);
+    overlay.appendChild(sheet);
+
+    const apply = dir => {
+        const before = read();
+        step(dir);
+        const after = read();
+        if (after !== before) animateValue(box, dir, after);
+    };
+
+    /* Botones ▲ ▼: un paso al tocar; si se mantienen, se repite */
+    const bindRepeat = (btn, dir) => {
+        let timer = null, interval = null;
+        const stop = () => { clearTimeout(timer); clearInterval(interval); timer = interval = null; };
+        btn.addEventListener("pointerdown", e => {
+            e.preventDefault();
+            apply(dir);
+            timer = setTimeout(() => { interval = setInterval(() => apply(dir), 110); }, 420);
+        });
+        ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, stop));
+        btn.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); apply(dir); } });
+    };
+    bindRepeat(up, 1);
+    bindRepeat(down, -1);
+
+    attachValueSwipe(box, apply, null, 34);
+
+    /* el "clic" que acompaña al toque que abrió el cuadro no debe pulsar nada */
+    const openedAt = performance.now();
+    const ready = () => performance.now() - openedAt > 350;
+
+    let closed = false;
+    const close = (confirmed = true) => {
+        if (closed) return;
+        closed = true;
+        window.removeEventListener("keydown", onKey, true);
+        stepperOverlay = null;
+
+        overlay.style.pointerEvents = "none";
+        sheet.animate([{ transform: "none", opacity: 1 }, { transform: "scale(0.9) translateY(4%)", opacity: 0 }], { duration: 130, easing: "ease-in", fill: "forwards" });
+        overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, fill: "forwards" }).finished.then(() => overlay.remove()).catch(() => overlay.remove());
+        if (onClose) onClose(confirmed);
+    };
+
+    const onKey = e => {
+        if (dialogOverlay) return;   /* hay un cuadro de texto encima: que lo maneje él */
+        if (e.key === "Escape") { e.preventDefault(); close(!cancelLabel); }
+        else if (e.key === "Enter") { e.preventDefault(); close(true); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); apply(1); }
+        else if (e.key === "ArrowDown") { e.preventDefault(); apply(-1); }
+    };
+    window.addEventListener("keydown", onKey, true);
+
+    done.onclick = () => { if (ready()) close(true); };
+    overlay.addEventListener("pointerdown", e => { if (e.target === overlay) close(!cancelLabel); });
+
+    document.body.appendChild(overlay);
+    stepperOverlay = overlay;
+
+    overlay.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "ease-out" });
+    sheet.animate([{ transform: "scale(0.84) translateY(6%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" });
 }
 
 
@@ -1248,15 +1522,17 @@ function openPicker(options) {
     list.className = "picker-list";
     sheet.appendChild(list);
 
-    const createBtn = document.createElement("button");
-    createBtn.className = "picker-create";
-    createBtn.textContent = `+ ${options.createLabel}`;
-    createBtn.onclick = () => {
-        const query = search ? search.value.trim() : "";
-        closePicker();
-        options.onCreate(query);
-    };
-    sheet.appendChild(createBtn);
+    if (options.onCreate) {
+        const createBtn = document.createElement("button");
+        createBtn.className = "picker-create";
+        createBtn.textContent = `+ ${options.createLabel}`;
+        createBtn.onclick = () => {
+            const query = search ? search.value.trim() : "";
+            closePicker();
+            options.onCreate(query);
+        };
+        sheet.appendChild(createBtn);
+    }
 
     const renderList = () => {
         const query = search ? normalizeText(search.value) : "";
@@ -1464,7 +1740,7 @@ function askText({ title, label, value, placeholder, maxLength, inputMode, allow
         input: { label, value, placeholder, maxLength, inputMode, allowEmpty, validate },
         buttons: [
             { label: "Cancelar", kind: "ghost", confirm: false, cancelValue: null },
-            { label: confirmLabel || "Aceptar", kind: "primary", confirm: true }
+            { label: confirmLabel || "Aceptar", kind: "accept", confirm: true }
         ]
     });
 }
@@ -1475,7 +1751,7 @@ function askConfirm({ title, message, confirmLabel, danger = true }) {
         message,
         buttons: [
             { label: "Cancelar", kind: "ghost", confirm: false, cancelValue: false },
-            { label: confirmLabel || "Borrar", kind: danger ? "danger" : "primary", confirm: true, value: true }
+            { label: confirmLabel || "Borrar", kind: danger ? "danger" : "accept", confirm: true, value: true }
         ]
     });
 }
@@ -1484,7 +1760,7 @@ function showMessage({ title, message }) {
     return openDialog({
         title,
         message,
-        buttons: [{ label: "Entendido", kind: "primary", confirm: true, value: true, cancelValue: undefined }]
+        buttons: [{ label: "Entendido", kind: "accept", confirm: true, value: true, cancelValue: undefined }]
     });
 }
 
@@ -1492,12 +1768,22 @@ function showMessage({ title, message }) {
     HISTORIAL
 ========================================================= */
 
+let historyOffset = 0; /* 0 = mes actual, -1 = anterior */
+
 function renderHistory() {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const view = new Date(now.getFullYear(), now.getMonth() + historyOffset, 1);
+    const year = view.getFullYear();
+    const month = view.getMonth();
+    const next = document.getElementById("histNext");
+    next.disabled = historyOffset >= 0;
+    if (!next.dataset.bound) {
+        next.dataset.bound = "1";
+        next.onclick = () => { if (historyOffset < 0) { historyOffset++; renderHistory(); } };
+        document.getElementById("histPrev").onclick = () => { historyOffset--; renderHistory(); };
+    }
 
-    const title = now.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    const title = view.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
     document.getElementById("historyTitle").textContent = title.charAt(0).toUpperCase() + title.slice(1);
 
     const grid = document.getElementById("historyGrid");
@@ -1602,6 +1888,8 @@ function fitLayout(force) {
         active.querySelectorAll("*").forEach(el => {
             const r = el.getBoundingClientRect();
             if (el.dataset.anim === "1") return;
+            const sc = el.closest("[data-scroll]");
+            if (sc && sc !== el) return;   /* lo que está dentro de una lista con su propio scroll no cuenta */
             if (r.height > 0 && r.bottom > lowest) lowest = r.bottom;
         });
         return Math.max(lowest - limit, main.scrollHeight - main.clientHeight) > 1;
@@ -1744,12 +2032,12 @@ function swipeContext(inHeader, axis) {
     if (inHeader) return axis === "x" ? tabs : null;
 
     if (active === "workout") {
-        if (axis === "x") return tabs;
+        if (axis !== "x") return null;
         const day = findDay(findRoutine(activeWorkout.routineId) || { days: [] }, activeWorkout.dayId);
         const total = day ? Math.ceil(day.exercises.length / EXERCISES_PER_SCREEN) : 1;
-        if (total < 2) return null;
+        if (total < 2) return tabs;
         return {
-            el: document.getElementById("workoutExercises"), axis: "y",
+            el: document.getElementById("workoutExercises"), axis: "x",
             can: d => workoutPage + d >= 0 && workoutPage + d < total,
             run: d => shiftWorkoutPage(d)
         };
