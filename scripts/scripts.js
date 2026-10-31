@@ -20,7 +20,8 @@ const DEFAULT_STATE = {
     routines: [],
     activeRoutineId: null,
     logs: {},
-    food: { log: {} }
+    food: { log: {} },
+    settings: { theme: "dark", glow: "verde" }
 };
 
 let state = loadState();
@@ -431,7 +432,7 @@ function showSection(sectionId) {
         renderSeriesPanel();
     } else if (sectionId === "workout") {
         const day = findDay(findRoutine(activeWorkout.routineId), activeWorkout.dayId);
-        setHeaderDateText(day ? day.name : "");
+        setHeaderDateText(day ? day.name : "", () => { if (!SWIPE.busy) showSection("week"); });
         renderWorkoutForDay(activeWorkout.routineId, activeWorkout.dayId);
     } else if (sectionId === "food") {
         setHeaderDateText(getDateText());
@@ -446,7 +447,9 @@ function showSection(sectionId) {
     const tab = TAB_ORDER.find(t => t.id === sectionId);
     label.textContent = tab ? tab.label : (sectionId === "workout" ? "ENTRENO" : label.textContent);
 
-    renderDots(document.getElementById("tabDots"), TAB_ORDER.length, TAB_ORDER.findIndex(t => t.id === sectionId));
+    /* Entreno pertenece a Semana: ilumina el punto de Semana */
+    const dotId = sectionId === "workout" ? "week" : sectionId;
+    renderDots(document.getElementById("tabDots"), TAB_ORDER.length, TAB_ORDER.findIndex(t => t.id === dotId));
 }
 
 /* Puntos indicadores (index = -1: ninguno activo) */
@@ -544,14 +547,14 @@ function buildExerciseCard(routineId, dayId, exerciseId) {
 
     const kgBox = document.createElement("div");
     kgBox.className = "kg-carousel";
-    kgBox.innerHTML = `<div class="kg-value" id="kg-${exerciseId}">${log.kg} kg</div>`;
+    kgBox.innerHTML = `<div class="kg-value" id="kg-${exerciseId}">${log.kg} ${unitOf(ex)}</div>`;
     attachValueSwipe(kgBox.querySelector(".kg-value"), dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP), () => openStepper({
         title: ex.name,
         subtitle: "Peso",
-        unit: "kg",
+        unit: unitOf(ex),
         read: () => String(readExerciseLog(routineId, getWorkoutDateKey(), getWorkoutExercise(routineId, dayId, exerciseId)).kg),
         step: dir => changeWorkoutKg(routineId, dayId, exerciseId, dir * KG_STEP),
-        onType: () => setCustomWorkoutKg(routineId, dayId, exerciseId),
+        onEdit: text => { const n = parseAmount(text); if (n === null) return "x"; setWorkoutKg(routineId, dayId, exerciseId, n); return ""; },
         onClose: refreshWorkout
     }));
     card.appendChild(kgBox);
@@ -588,6 +591,9 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
             unit: "reps",
             read: () => String(readExerciseLog(routineId, getWorkoutDateKey(), getWorkoutExercise(routineId, dayId, exerciseId)).reps[index]),
             step: dir => changeWorkoutReps(routineId, dayId, exerciseId, index, dir, null),
+            editMode: "numeric",
+            onEdit: text => { const n = parseAmount(text, { integer: true, max: 999 }); if (n === null) return "x"; setWorkoutReps(routineId, dayId, exerciseId, index, n, false); return ""; },
+            extra: index < ex.series.length - 1 ? { label: "Rellenar", onClick: () => { setWorkoutReps(routineId, dayId, exerciseId, index, readExerciseLog(routineId, getWorkoutDateKey(), getWorkoutExercise(routineId, dayId, exerciseId)).reps[index], true); return true; } } : null,
             onClose: refreshWorkout
         }));
         row.appendChild(wrap);
@@ -596,13 +602,50 @@ function renderWorkoutSeries(routineId, dayId, exerciseId, cardEl) {
     updateSemaphore(routineId, dayId, exerciseId);
 }
 
+/* La unidad (kg / lb) es solo un texto de cada ejercicio: nunca convierte los números */
+const unitOf = ex => (ex && ex.unit === "lb" ? "lb" : "kg");
+
+/* Números escritos a mano: acepta coma o punto. Devuelve null si no sirve. */
+function parseAmount(text, { integer = false, max = 9999 } = {}) {
+    const n = parseFloat(String(text).replace(",", "."));
+    if (isNaN(n) || n < 0 || n > max) return null;
+    return integer ? Math.round(n) : Math.round(n * 100) / 100;
+}
+
+function setWorkoutKg(routineId, dayId, exerciseId, value) {
+    const ex = getWorkoutExercise(routineId, dayId, exerciseId);
+    ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex).kg = value;
+    saveState();
+}
+
+/* Pone `value` repeticiones en la serie `index` y, si fill = true, también en todas las siguientes */
+function setWorkoutReps(routineId, dayId, exerciseId, index, value, fill) {
+    const ex = getWorkoutExercise(routineId, dayId, exerciseId);
+    const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
+    for (let i = index; i < ex.series.length; i++) { if (i === index || fill) log.reps[i] = value; }
+    saveState();
+    updateSemaphore(routineId, dayId, exerciseId);
+    renderSeriesPanel();
+}
+
+function setRoutineKg(routineId, dayId, exerciseIndex, value) {
+    findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].kg = value;
+    saveState();
+}
+
+function setRoutineReps(routineId, dayId, exerciseIndex, serieIndex, value, fill) {
+    const series = findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].series;
+    for (let i = serieIndex; i < series.length; i++) { if (i === serieIndex || fill) series[i].target = value; }
+    saveState();
+}
+
 function changeWorkoutKg(routineId, dayId, exerciseId, delta) {
     const ex = getWorkoutExercise(routineId, dayId, exerciseId);
     const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
     const before = log.kg;
     log.kg = Math.max(0, log.kg + delta);
     saveState();
-    if (log.kg !== before) animateValue(document.getElementById(`kg-${exerciseId}`), delta > 0 ? 1 : -1, `${log.kg} kg`);
+    if (log.kg !== before) animateValue(document.getElementById(`kg-${exerciseId}`), delta > 0 ? 1 : -1, `${log.kg} ${unitOf(ex)}`);
 }
 
 function changeWorkoutReps(routineId, dayId, exerciseId, index, delta, valueBox) {
@@ -991,11 +1034,6 @@ function buildDayExercisesView(routineId, dayId) {
 
     root.appendChild(actions);
 
-    const help = document.createElement("p");
-    help.className = "routine-help";
-    help.textContent = "Desliza hacia arriba o abajo sobre el peso o una serie para subirlo o bajarlo. Mantén presionado el peso para escribirlo; mantén presionada una serie para eliminarla. Máx. 6 series por ejercicio y 6 páginas (2 ejercicios por página).";
-    root.appendChild(help);
-
     return root;
 }
 
@@ -1041,6 +1079,7 @@ function createExercise(routineId, dayId, name) {
         id: newId("ex"),
         name,
         kg: 0,
+        unit: "kg",
         series: [{ target: 0, actual: 0 }, { target: 0, actual: 0 }, { target: 0, actual: 0 }]
     });
 
@@ -1093,18 +1132,22 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
 
     const kgBox = document.createElement("div");
     kgBox.className = "kg-carousel";
-    kgBox.innerHTML = `<div class="kg-value long-pressable">${exercise.kg} kg/lbs</div>`;
+    kgBox.innerHTML = `<div class="kg-value">${exercise.kg} ${unitOf(exercise)}</div>`;
     const kgValue = kgBox.querySelector(".kg-value");
+    const currentExercise = () => findDay(findRoutine(routineId), dayId).exercises[exerciseIndex];
     attachValueSwipe(kgValue, dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, kgValue), () => openStepper({
         title: exercise.name,
         subtitle: "Peso",
-        unit: "kg/lbs",
-        read: () => String(findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].kg),
+        unit: () => unitOf(currentExercise()),
+        read: () => String(currentExercise().kg),
         step: dir => changeRoutineKg(routineId, dayId, exerciseIndex, dir * KG_STEP, null),
-        onType: () => setCustomRoutineKg(routineId, dayId, exerciseIndex),
+        onEdit: text => { const n = parseAmount(text); if (n === null) return "x"; setRoutineKg(routineId, dayId, exerciseIndex, n); return ""; },
+        extra: {
+            label: () => (unitOf(currentExercise()) === "kg" ? "Cambiar a lb" : "Cambiar a kg"),
+            onClick: () => { const ex = currentExercise(); ex.unit = unitOf(ex) === "kg" ? "lb" : "kg"; saveState(); }
+        },
         onClose: renderRoutinesTab
     }));
-    attachLongPress(kgValue, () => setCustomRoutineKg(routineId, dayId, exerciseIndex));
     card.appendChild(kgBox);
 
     const seriesRow = document.createElement("div");
@@ -1124,6 +1167,9 @@ function buildRoutineExerciseCard(routineId, dayId, exerciseIndex) {
             unit: "reps",
             read: () => String(findDay(findRoutine(routineId), dayId).exercises[exerciseIndex].series[serieIndex].target),
             step: dir => changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, dir, null),
+            editMode: "numeric",
+            onEdit: text => { const n = parseAmount(text, { integer: true, max: 999 }); if (n === null) return "x"; setRoutineReps(routineId, dayId, exerciseIndex, serieIndex, n, false); return ""; },
+            extra: serieIndex < exercise.series.length - 1 ? { label: "Rellenar", onClick: () => { setRoutineReps(routineId, dayId, exerciseIndex, serieIndex, currentExercise().series[serieIndex].target, true); return true; } } : null,
             onClose: renderRoutinesTab
         }));
         attachLongPress(repsValue, () => removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex));
@@ -1154,7 +1200,7 @@ function changeRoutineKg(routineId, dayId, exerciseIndex, delta, valueBox) {
     const before = exercise.kg;
     exercise.kg = Math.max(0, exercise.kg + delta);
     saveState();
-    if (valueBox && exercise.kg !== before) animateValue(valueBox, delta > 0 ? 1 : -1, `${exercise.kg} kg/lbs`);
+    if (valueBox && exercise.kg !== before) animateValue(valueBox, delta > 0 ? 1 : -1, `${exercise.kg} ${unitOf(exercise)}`);
 }
 
 function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, valueBox) {
@@ -1165,25 +1211,6 @@ function changeRoutineReps(routineId, dayId, exerciseIndex, serieIndex, delta, v
     serie.target = Math.max(0, serie.target + delta);
     saveState();
     if (valueBox && serie.target !== before) animateValue(valueBox, delta > 0 ? 1 : -1, String(serie.target));
-}
-
-async function setCustomRoutineKg(routineId, dayId, exerciseIndex) {
-    const day = findDay(findRoutine(routineId), dayId);
-    const exercise = day.exercises[exerciseIndex];
-
-    const value = await askText({
-        title: "Peso personalizado",
-        label: "Peso (kg/lbs)",
-        value: String(exercise.kg),
-        inputMode: "decimal",
-        maxLength: 7,
-        validate: v => { const n = parseFloat(v.replace(",", ".")); return (isNaN(n) || n < 0) ? "Introduce un peso válido." : ""; }
-    });
-    if (value === null) return;
-
-    exercise.kg = parseFloat(value.replace(",", "."));
-    saveState();
-    renderRoutinesTab();
 }
 
 function removeRoutineSerie(routineId, dayId, exerciseIndex, serieIndex) {
@@ -1238,6 +1265,7 @@ function attachValueSwipe(el, onStep, onTap, stepPx = VALUE_STEP_PX) {
 
     el.addEventListener("pointerdown", e => {
         if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (e.target.closest && e.target.closest("input")) return;
         lastY = startY = e.clientY;
         startX = e.clientX;
         startT = performance.now();
@@ -1272,26 +1300,6 @@ function refreshWorkout() {
     renderSeriesPanel();
 }
 
-/* Peso exacto en Entreno (como ya existía en Rutinas) */
-async function setCustomWorkoutKg(routineId, dayId, exerciseId) {
-    const ex = getWorkoutExercise(routineId, dayId, exerciseId);
-    const current = readExerciseLog(routineId, getWorkoutDateKey(), ex).kg;
-
-    const value = await askText({
-        title: "Peso exacto",
-        label: "Peso (kg/lbs)",
-        value: String(current),
-        inputMode: "decimal",
-        maxLength: 7,
-        validate: v => { const n = parseFloat(v.replace(",", ".")); return (isNaN(n) || n < 0) ? "Introduce un peso válido." : ""; }
-    });
-    if (value === null) return;
-
-    const log = ensureExerciseLog(routineId, getWorkoutDateKey(), dayId, ex);
-    log.kg = parseFloat(value.replace(",", "."));
-    saveState();
-}
-
 /* =========================================================
     CUADRO PARA CAMBIAR UN NÚMERO (toque corto sobre peso o repeticiones)
     Ventana más grande que el cuadro original: un área grande para deslizar
@@ -1301,7 +1309,7 @@ async function setCustomWorkoutKg(routineId, dayId, exerciseId) {
 
 let stepperOverlay = null;
 
-function openStepper({ title, subtitle, unit, read, step, onType, onClose, doneLabel, cancelLabel }) {
+function openStepper({ title, subtitle, unit, read, step, onEdit, editMode, extra, onClose, doneLabel, cancelLabel }) {
     if (stepperOverlay) return;
 
     const overlay = document.createElement("div");
@@ -1337,21 +1345,31 @@ function openStepper({ title, subtitle, unit, read, step, onType, onClose, doneL
 
     const unitEl = document.createElement("div");
     unitEl.className = "stepper-unit";
-    unitEl.textContent = unit;
+    const unitText = () => (typeof unit === "function" ? unit() : unit);
+    unitEl.textContent = unitText();
 
     const hint = document.createElement("div");
     hint.className = "stepper-hint";
-    hint.textContent = "Desliza sobre el número o usa ▲ ▼";
+    hint.textContent = onEdit ? "Desliza, usa ▲ ▼ o toca el número para escribirlo" : "Desliza sobre el número o usa ▲ ▼";
 
     const actions = document.createElement("div");
     actions.className = "dialog-actions";
-    if (onType) {
-        const typeBtn = document.createElement("button");
-        typeBtn.type = "button";
-        typeBtn.className = "dialog-btn ghost";
-        typeBtn.textContent = "Escribir";
-        typeBtn.onclick = async () => { if (!ready()) return; await onType(); box.textContent = read(); };
-        actions.appendChild(typeBtn);
+    if (extra) {
+        const extraBtn = document.createElement("button");
+        extraBtn.type = "button";
+        extraBtn.className = "dialog-btn ghost";
+        const paintExtra = () => {
+            extraBtn.textContent = typeof extra.label === "function" ? extra.label() : extra.label;
+            unitEl.textContent = unitText();
+        };
+        paintExtra();
+        extraBtn.onclick = () => {
+            if (!ready()) return;
+            const closeAfter = extra.onClick();
+            paintExtra();
+            if (closeAfter) close(true);
+        };
+        actions.appendChild(extraBtn);
     }
     if (cancelLabel) {
         const cancelBtn = document.createElement("button");
@@ -1392,7 +1410,53 @@ function openStepper({ title, subtitle, unit, read, step, onType, onClose, doneL
     bindRepeat(up, 1);
     bindRepeat(down, -1);
 
-    attachValueSwipe(box, apply, null, 34);
+    /* Tocar el número lo convierte en un campo de texto: se abre el teclado y Enter aplica */
+    let editing = false;
+    const startEdit = () => {
+        if (!onEdit || editing || !ready()) return;
+        editing = true;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "stepper-input";
+        input.inputMode = editMode || "decimal";
+        input.enterKeyHint = "done";
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.maxLength = 7;
+        input.setAttribute("aria-label", "Escribir valor");
+        input.value = read().replace(".", ",");
+
+        box.textContent = "";
+        box.classList.add("editing");
+        box.appendChild(input);
+        input.focus();
+        input.select();
+
+        let finished = false;
+        const finish = (commit, fromBlur) => {
+            if (finished) return;
+            if (commit) {
+                const text = input.value.trim();
+                const problem = text ? onEdit(text) : "vacío";
+                if (problem && !fromBlur) { input.classList.add("bad"); return; }
+            }
+            finished = true;
+            editing = false;
+            box.classList.remove("editing");
+            box.textContent = read();
+        };
+
+        input.addEventListener("keydown", e => {
+            e.stopPropagation();
+            if (e.key === "Enter") { e.preventDefault(); finish(true, false); }
+            else if (e.key === "Escape") { e.preventDefault(); finish(false, false); }
+        });
+        input.addEventListener("input", () => input.classList.remove("bad"));
+        input.addEventListener("blur", () => finish(true, true));
+    };
+
+    attachValueSwipe(box, apply, startEdit, 34);
 
     /* el "clic" que acompaña al toque que abrió el cuadro no debe pulsar nada */
     const openedAt = performance.now();
@@ -1413,6 +1477,7 @@ function openStepper({ title, subtitle, unit, read, step, onType, onClose, doneL
 
     const onKey = e => {
         if (dialogOverlay) return;   /* hay un cuadro de texto encima: que lo maneje él */
+        if (e.target.classList && e.target.classList.contains("stepper-input")) return;   /* escribiendo el número */
         if (e.key === "Escape") { e.preventDefault(); close(!cancelLabel); }
         else if (e.key === "Enter") { e.preventDefault(); close(true); }
         else if (e.key === "ArrowUp") { e.preventDefault(); apply(1); }
@@ -1853,10 +1918,6 @@ function openHistoryDay(key) {
     } else {
         showSection("week");
     }
-}
-
-function completeWorkout() {
-    goToWeek();
 }
 
 /* =========================================================
