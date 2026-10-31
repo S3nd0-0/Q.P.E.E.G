@@ -17,6 +17,9 @@
     <link rel="icon" href="icons/icon-192.png">
 
     <link rel="stylesheet" href="styles/stylesheet.css">
+
+    <!-- evita el parpadeo del tema claro al abrir -->
+    <script>try{var _s=JSON.parse(localStorage.getItem("qpeeg_state_v1")||"{}").settings;if(_s&&_s.theme==="light")document.documentElement.setAttribute("data-theme","light")}catch(e){}</script>
 </head>
 
 <body>
@@ -26,6 +29,13 @@
 ========================== -->
 
 <div id="landing" class="landing">
+
+    <button id="settingsBtn" class="settings-btn" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+    </button>
 
     <h1 class="landing-title">Q.P.E.E.G</h1>
 
@@ -104,9 +114,6 @@
             <div id="workoutExercises"></div>
             <div id="workoutDots" class="page-indicator"></div>
 
-            <button class="primary" onclick="completeWorkout()">
-                Completar rutina
-            </button>
         </section>
 
         <!-- RUTINAS -->
@@ -134,6 +141,7 @@
 </div>
 
 <script src="scripts/scripts.js"></script>
+<script src="scripts/settings.js"></script>
 <script src="scripts/food.js"></script>
 </body>
 </html>
